@@ -671,9 +671,19 @@ class Model(object):
             with open('output\\result_' + name + '.json', 'w') as fp:
                 json.dump(pop_dict, fp)
             print('JSon ', 'output\\result_' + name + '.json', 'exported')
-            values = [pop_pandas.columns] + list(pop_pandas.values)
+            pop_pandas.to_csv('output\\result_' + name + '.csv', index = False)
+            print('CSV ', 'output\\result_' + name + '.csv', 'exported')
+            print('Begin excel exportation')
             wb = Workbook()
-            wb.new_sheet('All_values', data=values)
+            for gv in tqdm(departments):
+                pop_pandas_current = pop_pandas[pop_pandas['Department'] == gv].drop(columns='Department')
+                values = [pop_pandas_current.columns] + list(pop_pandas_current.values)
+                name_gv = gv if len(gv) < 31 else gv[:15]
+                wb.new_sheet(name_gv, data=values)
+            pop_pandas_current = pop_pandas.groupby('Department').sum().reset_index(drop=False)
+            values = [pop_pandas_current.columns] + list(pop_pandas_current.values)
+            print('Excel exportation country results')
+            wb.new_sheet('Country_results', data=values)
             wb.save('output\\result_' + name + '.xlsx')
             print('Excel ', 'output\\result_' + name + '.xlsx', 'exported')
             return pop_pandas

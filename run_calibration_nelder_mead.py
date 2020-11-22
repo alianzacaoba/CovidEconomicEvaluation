@@ -12,6 +12,7 @@ class Calibration(object):
         self.model = Model()
         self.ideal_values = dict()
         self.results = list()
+        self.current_results = ()
         self.type_params = dict()
         for pv in self.model.time_params:
             self.type_params[pv] = 'BASE_VALUE'
@@ -30,10 +31,10 @@ class Calibration(object):
 
     def run_calibration(self, initial_cases: int = 30, beta_inf: float = 0.0, beta_base: float = 0.05,
                         beta_sup: float = 1.0, death_inf: float = 0.0, death_base: float = 1, death_sup: float = 2.6,
-                        total: bool = True, iteration: int = 1):
+                        total: bool = True, iteration: int = 1, max_shrinks: int = 5):
         start_processing_s = time.process_time()
         start_time = datetime.datetime.now()
-
+        self.current_results = list()
         real_case = np.transpose(np.array(([self.real_cases['cases_total'], self.real_cases['deaths_total']] if total
                                           else [self.real_cases['cases_new'], self.real_cases['deaths_new']]),
                                           dtype='float64'))
@@ -54,7 +55,9 @@ class Calibration(object):
                   np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
         print('Error:', y)
         v_1 = {'Beta': x[i], 'DC': x2[i], 'Error': y}
-        self.results.append(v_1)
+        if v_1 not in self.results:
+            self.results.append(v_1)
+        self.current_results.append(v_1)
         print('Current best results: ', v_1)
         i = 1
         print('Initial iteration', int(i + 1), 'Beta', x[i], 'DC', x2[i])
@@ -69,7 +72,10 @@ class Calibration(object):
                   np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
         print('Error:', y)
         v_new = {'Beta': x[i], 'DC': x2[i], 'Error': y}
-        self.results.append(v_new)
+        if v_new not in self.results:
+            self.results.append(v_new)
+        self.current_results.append(v_new)
+
         if v_new['Error'] < v_1['Error']:
             v_2 = v_1
             v_1 = v_new
@@ -89,7 +95,9 @@ class Calibration(object):
                   np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
         print('Error:', y)
         v_new = {'Beta': x[i], 'DC': x2[i], 'Error': y}
-        self.results.append(v_new)
+        if v_new not in self.results:
+            self.results.append(v_new)
+        self.current_results.append(v_new)
         if v_new['Error'] < v_1['Error']:
             v_3 = v_2
             v_2 = v_1
@@ -103,7 +111,8 @@ class Calibration(object):
         for i in range(3, initial_cases):
             print('Initial iteration', int(i + 1), 'Beta', x[i], 'DC', x2[i])
             sim_results = self.model.run(self.type_params, name='Calibration' + str(i), run_type='calibration',
-                                         beta=x[i], death_coefficient=x2[i], calculated_arrival=True, sim_length=236)[14:237]
+                                         beta=x[i], death_coefficient=x2[i],
+                                         calculated_arrival=True, sim_length=236)[14:237]
             if not total:
                 sim_results_alt = sim_results.copy()
                 for k in range(1, len(sim_results)):
@@ -113,7 +122,9 @@ class Calibration(object):
                       np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
             print('Error:', y)
             v_new = {'Beta': x[i], 'DC': x2[i], 'Error': y}
-            self.results.append(v_new)
+            if v_new not in self.results:
+                self.results.append(v_new)
+            self.current_results.append(v_new)
             if v_new['Error'] < v_1['Error']:
                 v_3 = v_2
                 v_2 = v_1
@@ -127,7 +138,7 @@ class Calibration(object):
 
         i = initial_cases
         n_shrinks = 0
-        while n_shrinks < 10 and v_1 != v_2 and v_2 != v_3:
+        while n_shrinks < max_shrinks and v_1 != v_2 and v_2 != v_3:
             i += 1
             print('Nelder-Mead iteration', int(i + 1))
             current_best_values = [v_1, v_2, v_3]
@@ -139,34 +150,35 @@ class Calibration(object):
             else:
                 n_shrinks = 0
             v_1, v_2, v_3 = nelder_mead_result['values']
-            if v_1 not in self.results:
-                self.results.append(v_1)
-            if v_2 not in self.results:
-                self.results.append(v_2)
+            if v_1 not in self.current_results:
+                self.current_results.append(v_1)
+            if v_2 not in self.current_results:
+                self.current_results.append(v_2)
             if v_3 not in self.results:
-                self.results.append(v_3)
+                self.current_results.append(v_3)
             print('Current best results: ', v_1)
         self.ideal_values = v_1
         print('Optima found: ', v_1)
-        results = {'Best': v_1, 'Values': self.results}
-        results_pd = pd.DataFrame(self.results)
-        with open('output\\calibration_nm_results_' + ('total' if total else 'new') + str(iteration)+ '.json', 'w') as fp:
+        results = {'Best': v_1, 'Values': self.current_results}
+        results_pd = pd.DataFrame(self.current_results)
+        with open('output\\calibration_nm_results_' + ('total' if total else 'new') + str(iteration) + '.json', 'w') \
+                as fp:
             json.dump(results, fp)
         values = [results_pd.columns] + list(results_pd.values)
         wb = Workbook()
         wb.new_sheet('All_values', data=values)
-        wb.save('output\\calibration_nm_results2_' + ('total' if total else 'new')  + str(iteration)+ '.xlsx')
+        wb.save('output\\calibration_nm_results2_' + ('total' if total else 'new') + str(iteration) + '.xlsx')
         print('Excel ', 'output\\calibration_nm_results2_' + ('total' if total else 'new') + '.xlsx', 'exported')
 
         end_processing_s = time.process_time()
         end_time = datetime.datetime.now()
         print('Performance: {0}'.format(end_processing_s - start_processing_s))
-        time_diff = (end_time - start_time)
-        execution_time = time_diff.total_seconds()
-        mm = int(execution_time / 60)
-        ss = int(execution_time % 60)
-        print('Execution Time: {0} minutes {1} seconds'.format(mm, ss))
-        print('Execution Time: {0} milliseconds'.format(execution_time * 1000))
+        this_time_diff = (end_time - start_time)
+        this_execution_time = this_time_diff.total_seconds()
+        this_mm = int(execution_time / 60)
+        this_ss = int(execution_time % 60)
+        print('Execution Time: {0} minutes {1} seconds'.format(this_mm, this_ss))
+        print('Execution Time: {0} milliseconds'.format(this_execution_time * 1000))
         return results
 
     def nelder_mead_iteration(self, best_values: list, real_case: np.array,  alpha: float = 1.0, beta: float = 0.5,
@@ -196,6 +208,9 @@ class Calibration(object):
             del sim_results_alt
         y = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
                   np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
+        v_new = {'Beta': reflection_point[0], 'DC': reflection_point[1], 'Error': y}
+        if v_new not in self.results:
+            self.results.append(v_new)
         if y < v_1['Error']:
             # Expansion
             expansion_point = centroid - gamma*(centroid-worst_point)
@@ -211,6 +226,9 @@ class Calibration(object):
                 del sim_results_alt
             y2 = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
                        np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
+            v_new = {'Beta': expansion_point[0], 'DC': expansion_point[1], 'Error': y2}
+            if v_new not in self.results:
+                self.results.append(v_new)
             if y2 < y:
                 v_3 = v_1
                 v_2 = {'Beta': float(reflection_point[0]), 'DC': float(reflection_point[1]), 'Error': y}
@@ -238,6 +256,9 @@ class Calibration(object):
                 del sim_results_alt
             y3 = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
                        np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
+            v_new = {'Beta': outside_contraction_point[0], 'DC': outside_contraction_point[1], 'Error': y3}
+            if v_new not in self.results:
+                self.results.append(v_new)
             if y3 < y:
                 if y3 < v_1['Error']:
                     v_3 = v_2
@@ -270,7 +291,8 @@ class Calibration(object):
                 y_s = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
                                   np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
                 v_2 = {'Beta': float(new_v[0]), 'DC': float(new_v[1]), 'Error': y_s}
-
+                if v_2 not in self.results:
+                    self.results.append(v_2)
                 new_v = np.array([v_3['Beta'], v_3['DC']])
                 new_v = new_v + delta * (new_v - v_1_vec)
                 new_v[0] = max(new_v[0], 0)
@@ -286,6 +308,8 @@ class Calibration(object):
                 y_s = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
                                   np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
                 v_3 = {'Beta': float(new_v[0]), 'DC': float(new_v[1]), 'Error': y_s}
+                if v_3 not in self.results:
+                    self.results.append(v_3)
                 if v_3['Error'] < v_2['Error']:
                     v_2_temp = v_3
                     v_3 = v_2
@@ -314,6 +338,9 @@ class Calibration(object):
                 del sim_results_alt
             y4 = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
                        np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
+            v_new = {'Beta': inside_contraction_point[0], 'DC': inside_contraction_point[1], 'Error': y4}
+            if v_new not in self.results:
+                self.results.append(v_new)
             if y4 < v_1['Error']:
                 v_3 = v_2
                 v_2 = v_1
@@ -345,7 +372,8 @@ class Calibration(object):
                 y_s = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
                             np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
                 v_2 = {'Beta': float(new_v[0]), 'DC': float(new_v[1]), 'Error': y_s}
-
+                if v_2 not in self.results:
+                    self.results.append(v_2)
                 new_v = np.array([v_3['Beta'], v_3['DC']])
                 new_v = new_v + delta * (new_v - v_1_vec)
                 sim_results = self.model.run(self.type_params, name='Calibration', run_type='calibration',
@@ -359,6 +387,8 @@ class Calibration(object):
                 y_s = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
                             np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
                 v_3 = {'Beta': float(new_v[0]), 'DC': float(new_v[1]), 'Error': y_s}
+                if v_3 not in self.results:
+                    self.results.append(v_3)
         return {'values': [v_1, v_2, v_3], 'shrink': shrink}
 
 
@@ -366,10 +396,10 @@ start_processing_s_t = time.process_time()
 start_time_t = datetime.datetime.now()
 
 c_beta_inf = 0.0
-c_beta_base = 0.1 # 0.008140019590906994
+c_beta_base = 0.01  # 0.008140019590906994
 c_beta_sup = 0.5
 c_death_inf = 1.4
-c_death_base = 1.5 # 1.9830377761558986
+c_death_base = 1.5  # 1.9830377761558986
 c_death_sup = 2.6
 calibration_model = Calibration()
 c_beta_ant = 0.0
@@ -378,13 +408,18 @@ n_iteration = 0
 # 'Beta': 0.008140019590906994, 'DC': 1.9830377761558986, 'Error': 0.7050015812639594
 n_cases = 150
 while c_beta_ant != c_beta_base or c_death_ant != c_death_base:
+    if c_beta_ant + c_death_ant > 0:
+        c_beta_sup = (c_beta_base+c_beta_sup)/2
+        c_beta_inf = (c_beta_base+c_beta_inf)/2
+        c_death_sup = (c_death_base + c_death_sup) / 2
+        c_death_sup = (c_death_sup + c_death_sup) / 2
     c_beta_ant = c_beta_base
     c_death_ant = c_death_base
-    n_iteration +=1
+    n_iteration += 1
     print('Cycle number:', n_iteration)
     r = calibration_model.run_calibration(initial_cases=n_cases, beta_inf=c_beta_inf, beta_base=c_beta_base,
                                           beta_sup=c_beta_sup, death_inf=c_death_inf, death_base=c_death_base,
-                                          death_sup=c_death_sup, total=True, iteration = n_iteration)
+                                          death_sup=c_death_sup, total=True, iteration=n_iteration, max_shrinks=2)
     c_beta_base = r['Best']['Beta']
     c_death_base = r['Best']['DC']
     n_cases = round(n_cases*0.9)
@@ -398,3 +433,6 @@ ss = int(execution_time % 60)
 print('Total Execution Time: {0} minutes {1} seconds'.format(mm, ss))
 print('Total Execution Time: {0} milliseconds'.format(execution_time * 1000))
 print('Total cycles:', n_iteration)
+with open('output\\calibration_consolidated_results_.json', 'w') as fp:
+    json.dump(calibration_model.results, fp)
+

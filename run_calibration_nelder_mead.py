@@ -41,9 +41,10 @@ class Calibration(object):
         x = np.random.triangular(beta_inf, beta_base, beta_sup, size=initial_cases)
         x2 = np.random.triangular(death_inf, death_base, death_sup, size=initial_cases)
         i = 0
-        print('Initial iteration', int(i + 1), 'Beta', x[i], 'DC', x2[i])
-        sim_results = self.model.run(self.type_params, name='Calibration' + str(i), run_type='calibration', beta=x[i],
-                                     death_coefficient=x2[i], calculated_arrival=True, sim_length=236)[14:237]
+        print('Initial iteration', int(i + 1), 'Beta', beta_base, 'DC', death_base)
+        sim_results = self.model.run(self.type_params, name='Calibration' + str(i), run_type='calibration',
+                                     beta=beta_base, death_coefficient=death_base, calculated_arrival=True,
+                                     sim_length=236)[14:237]
         if not total:
             sim_results_alt = sim_results.copy()
             for k in range(1, len(sim_results)):
@@ -102,8 +103,7 @@ class Calibration(object):
         for i in range(3, initial_cases):
             print('Initial iteration', int(i + 1), 'Beta', x[i], 'DC', x2[i])
             sim_results = self.model.run(self.type_params, name='Calibration' + str(i), run_type='calibration',
-                                         beta=x[i],
-                                         death_coefficient=x2[i], calculated_arrival=True, sim_length=236)[14:237]
+                                         beta=x[i], death_coefficient=x2[i], calculated_arrival=True, sim_length=236)[14:237]
             if not total:
                 sim_results_alt = sim_results.copy()
                 for k in range(1, len(sim_results)):
@@ -155,8 +155,8 @@ class Calibration(object):
         values = [results_pd.columns] + list(results_pd.values)
         wb = Workbook()
         wb.new_sheet('All_values', data=values)
-        wb.save('output\\calibration_nm_results_' + ('total' if total else 'new') + '.xlsx')
-        print('Excel ', 'output\\calibration_nm_results_' + ('total' if total else 'new') + '.xlsx', 'exported')
+        wb.save('output\\calibration_nm_results2_' + ('total' if total else 'new') + '.xlsx')
+        print('Excel ', 'output\\calibration_nm_results2_' + ('total' if total else 'new') + '.xlsx', 'exported')
 
         end_processing_s = time.process_time()
         end_time = datetime.datetime.now()
@@ -167,6 +167,7 @@ class Calibration(object):
         ss = int(execution_time % 60)
         print('Execution Time: {0} minutes {1} seconds'.format(mm, ss))
         print('Execution Time: {0} milliseconds'.format(execution_time * 1000))
+        return results
 
     def nelder_mead_iteration(self, best_values: list, real_case: np.array,  alpha: float = 1.0, beta: float = 0.5,
                               gamma: float = 2.0, delta: float = 0.5, total: bool = True):
@@ -178,7 +179,8 @@ class Calibration(object):
               (((v_2['Beta'] - v_3['Beta']) ** 2 + (v_2['DC'] - v_3['DC']) ** 2) ** 0.5)
         worst_point = np.array([v_3['Beta'], v_3['DC']])
         centroid = np.array([(w_1*v_1['Beta']+w_2*v_2['Beta'])/(w_1+w_2), (w_1*v_1['DC']+w_2*v_2['DC'])/(w_1+w_2)])
-        print(worst_point, centroid)
+        print(v_1, v_2, v_3)
+        print(centroid)
         shrink = False
         # Reflection
         reflection_point = centroid - alpha*(centroid-worst_point)
@@ -213,17 +215,9 @@ class Calibration(object):
                 v_3 = v_1
                 v_2 = {'Beta': float(reflection_point[0]), 'DC': float(reflection_point[1]), 'Error': y}
                 v_1 = {'Beta': float(expansion_point[0]), 'DC': float(expansion_point[1]), 'Error': y2}
-            elif y2 < v_1['Error']:
+            else:
                 v_3 = v_1
                 v_2 = {'Beta': float(expansion_point[0]), 'DC': float(expansion_point[1]), 'Error': y2}
-                v_1 = {'Beta': float(reflection_point[0]), 'DC': float(reflection_point[1]), 'Error': y}
-            elif y2 < v_2['Error']:
-                v_3 = {'Beta': float(expansion_point[0]), 'DC': float(expansion_point[1]), 'Error': y2}
-                v_2 = v_1
-                v_1 = {'Beta': float(reflection_point[0]), 'DC': float(reflection_point[1]), 'Error': y}
-            else:
-                v_3 = v_2
-                v_2 = v_1
                 v_1 = {'Beta': float(reflection_point[0]), 'DC': float(reflection_point[1]), 'Error': y}
         elif y < v_2['Error']:
             v_3 = v_2
@@ -266,10 +260,8 @@ class Calibration(object):
                 new_v[0] = max(new_v[0], 0)
                 new_v[1] = max(new_v[1], 0)
                 sim_results = self.model.run(self.type_params, name='Calibration', run_type='calibration',
-                                             beta=float(new_v[0]),
-                                             death_coefficient=float(new_v[1]),
-                                             calculated_arrival=True,
-                                             sim_length=236)[14:237]
+                                             beta=float(new_v[0]), death_coefficient=float(new_v[1]),
+                                             calculated_arrival=True, sim_length=236)[14:237]
                 if not total:
                     sim_results_alt = sim_results.copy()
                     for k in range(1, len(sim_results)):
@@ -284,10 +276,8 @@ class Calibration(object):
                 new_v[0] = max(new_v[0], 0)
                 new_v[1] = max(new_v[1], 0)
                 sim_results = self.model.run(self.type_params, name='Calibration', run_type='calibration',
-                                             beta=float(new_v[0]),
-                                             death_coefficient=float(new_v[1]),
-                                             calculated_arrival=True,
-                                             sim_length=236)[14:237]
+                                             beta=float(new_v[0]), death_coefficient=float(new_v[1]),
+                                             calculated_arrival=True, sim_length=236)[14:237]
                 if not total:
                     sim_results_alt = sim_results.copy()
                     for k in range(1, len(sim_results)):
@@ -296,6 +286,18 @@ class Calibration(object):
                 y_s = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
                                   np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
                 v_3 = {'Beta': float(new_v[0]), 'DC': float(new_v[1]), 'Error': y_s}
+                if v_3['Error'] < v_2['Error']:
+                    v_2_temp = v_3
+                    v_3 = v_2
+                    v_2 = v_2_temp
+                if v_2['Error'] < v_1['Error']:
+                    v_1_temp = v_2
+                    v_2 = v_1
+                    v_1 = v_1_temp
+                    if v_3['Error'] < v_2['Error']:
+                        v_2_temp = v_3
+                        v_3 = v_2
+                        v_2 = v_2_temp
         else:
             # Inside contraction point
             inside_contraction_point = centroid - beta * (centroid - worst_point)
@@ -333,10 +335,8 @@ class Calibration(object):
                 new_v[0] = max(new_v[0], 0)
                 new_v[1] = max(new_v[1], 0)
                 sim_results = self.model.run(self.type_params, name='Calibration', run_type='calibration',
-                                             beta=float(new_v[0]),
-                                             death_coefficient=float(new_v[1]),
-                                             calculated_arrival=True,
-                                             sim_length=236)[14:237]
+                                             beta=float(new_v[0]), death_coefficient=float(new_v[1]),
+                                             calculated_arrival=True, sim_length=236)[14:237]
                 if not total:
                     sim_results_alt = sim_results.copy()
                     for k in range(1, len(sim_results)):
@@ -349,10 +349,8 @@ class Calibration(object):
                 new_v = np.array([v_3['Beta'], v_3['DC']])
                 new_v = new_v + delta * (new_v - v_1_vec)
                 sim_results = self.model.run(self.type_params, name='Calibration', run_type='calibration',
-                                             beta=float(new_v[0]),
-                                             death_coefficient=float(new_v[1]),
-                                             calculated_arrival=True,
-                                             sim_length=236)[14:237]
+                                             beta=float(new_v[0]), death_coefficient=float(new_v[1]),
+                                             calculated_arrival=True, sim_length=236)[14:237]
                 if not total:
                     sim_results_alt = sim_results.copy()
                     for k in range(1, len(sim_results)):
@@ -365,14 +363,23 @@ class Calibration(object):
 
 
 c_beta_inf = 0.0
-c_beta_base = 0.07
-c_beta_sup = 0.1
-c_death_inf = 1.0
-c_death_base = 1.5
-c_death_sup = 2.6
+c_beta_base = 0.008140019590906994
+c_beta_sup = 0.01
+c_death_inf = 1.4
+c_death_base = 1.9830377761558986
+c_death_sup = 2.2
 calibration_model = Calibration()
-calibration_model.run_calibration(initial_cases=100, beta_inf=c_beta_inf, beta_base=c_beta_base, beta_sup=c_beta_sup,
-                                    death_inf=c_death_inf, death_base=c_death_base, death_sup=c_death_sup, total=True)
+c_beta_ant = 0.0
+c_death_ant = 0.0
+while c_beta_ant != c_beta_base or c_death_ant != c_death_base:
+    c_beta_ant = c_beta_base
+    c_death_ant = c_death_base
+    r = calibration_model.run_calibration(initial_cases=60, beta_inf=c_beta_inf, beta_base=c_beta_base,
+                                          beta_sup=c_beta_sup, death_inf=c_death_inf, death_base=c_death_base,
+                                          death_sup=c_death_sup, total=True)
+    c_beta_base = r['Best']['Beta']
+    c_death_base = r['Best']['DC']
+
 # calibration_model_2 = Calibration()
 # calibration_model_2.run_calibration(initial_cases=30, beta_inf=c_beta_inf, beta_base=c_beta_base, beta_sup=c_beta_sup,
 #                                    death_inf=c_death_inf, death_base=c_death_base, death_sup=c_death_sup, total=False)

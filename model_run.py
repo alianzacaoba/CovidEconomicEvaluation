@@ -44,7 +44,8 @@ class Model(object):
         self.age_groups = list(initial_pop.AGE_GROUP.unique())
         self.work_groups = list(initial_pop.WORK_GROUP.unique())
         self.health_groups = list(initial_pop.HEALTH_GROUP.unique())
-        self.neighbors = json.load(open('input\\neighbors.json'))
+        with open('input\\neighbors.json') as json_file:
+            self.neighbors = json.load(json_file)
         self.initial_population = dict()
         for g in self.departments:
             dep_department = dict()
@@ -111,8 +112,8 @@ class Model(object):
 
     def run(self, type_params: dict, name: str = 'Iteration', run_type: str = 'vaccination', beta: float = 0.5,
             death_coefficient: float = 1.0, vaccine_priority: list = None, vaccine_capacities: dict = None,
-            vaccine_effectiveness: dict = None, vaccine_start_day: dict = None, calculated_arrival: bool = True,
-            sim_length: int = 236, movement_coefficient: float = 0.01):
+            vaccine_effectiveness: dict = None, vaccine_start_day: dict = None, vaccine_end_day: dict = None,
+            calculated_arrival: bool = True, sim_length: int = 236, movement_coefficient: float = 0.01):
         # run_type:
         #   1) 'calibration': for calibration purposes, states f1,f2,v1,v2,e_f,a_f do not exist
         #   2) 'vaccination': model with vaccine states
@@ -222,17 +223,18 @@ class Model(object):
                     population_e[wv] = population_w
                 population_g[ev] = population_e
             population[gv] = population_g
-        vaccine_assignments = None
         for t in tqdm(range(sim_length)):
             dep_pob = dict()
             for gv in departments:
                 if t > 50:
                     arrival_rate[gv] = 0.0
-                if run_type == 'vaccination' and t >= vaccine_start_day[gv]:
+                if run_type == 'vaccination' and vaccine_start_day[gv] <= t <= vaccine_end_day[gv]:
                     vaccine_assignments = calculate_vaccine_assignments(department_population=population[gv],
                                                                              day=t, vaccine_priority=vaccine_priority,
                                                                              vaccine_capacity=vaccine_capacities[gv],
                                                                              candidates_indexes=candidates_indexes)
+                else:
+                    vaccine_assignments = None
                 i_1 = list()
                 i_2 = list()
                 dep_pob[gv] = 0.0
@@ -306,10 +308,10 @@ class Model(object):
                                 if vaccine_assignments is not None:
                                     dsu_dt = {-cur_su * vaccine_assignments[ev][wv][hv]}
                                     df_1_dt = {-cur_f_1 * vaccine_assignments[ev][wv][hv],
-                                               cur_su * (1 - vaccine_effectiveness[ev][0]) *
+                                               cur_su * (1 - vaccine_effectiveness[(ev, 0)]) *
                                                vaccine_assignments[ev][wv][hv]
                                                }
-                                    df_2_dt = {cur_f_1 * (1 - vaccine_effectiveness[ev][1]) *
+                                    df_2_dt = {cur_f_1 * (1 - vaccine_effectiveness[(ev, 1)]) *
                                                vaccine_assignments[ev][wv][hv]
                                                }
                                     de_dt = {-cur_e * vaccine_assignments[ev][wv][hv]}
@@ -317,12 +319,12 @@ class Model(object):
                                     da_f_dt = {cur_e*(1-p_s[ev])*vaccine_assignments[ev][wv][hv]}
                                     dr_a_dt = {-cur_r_a*vaccine_assignments[ev][wv][hv]}
                                     dv_1_dt = {-cur_v_1*vaccine_assignments[ev][wv][hv],
-                                               cur_su*vaccine_effectiveness[ev][0]*vaccine_assignments[ev][wv][hv],
+                                               cur_su*vaccine_effectiveness[(ev, 0)]*vaccine_assignments[ev][wv][hv],
                                                cur_a*vaccine_assignments[ev][wv][hv],
                                                cur_r_a*vaccine_assignments[ev][wv][hv]
                                                }
                                     dv_2_dt = {cur_v_1*vaccine_assignments[ev][wv][hv],
-                                               cur_f_1*vaccine_effectiveness[ev][1]*vaccine_assignments[ev][wv][hv]
+                                               cur_f_1*vaccine_effectiveness[(ev, 1)]*vaccine_assignments[ev][wv][hv]
                                                }
 
                                     cur_su += sum(dsu_dt)
@@ -395,26 +397,28 @@ class Model(object):
                                          }
                                 dcases_dt = {cur_e * p_s[ev] / t_e}
                                 dv_2_dt = {cur_a_f/t_a}
-                                cur_su += float(sum(dsu_dt))
-                                cur_e += float(sum(de_dt))
-                                cur_a += float(sum(da_dt))
-                                cur_r_a += float(sum(dr_a_dt))
-                                cur_p += float(sum(dp_dt))
-                                cur_sy += float(sum(dsy_dt))
-                                cur_c += float(sum(dc_dt))
-                                cur_r_c += float(sum(dr_c_dt))
-                                cur_h += float(sum(dh_dt))
-                                cur_r_h += float(sum(dr_h_dt))
-                                cur_i += float(sum(di_dt))
-                                cur_r_i += float(sum(dr_i_dt))
-                                cur_r += float(sum(dr_dt))
-                                cur_d += float(sum(dd_dt))
-                                cur_cases += float(sum(dcases_dt))
-                                cur_f_1 += sum(df_1_dt)
-                                cur_f_2 += sum(df_2_dt)
-                                cur_e_f += sum(de_f_dt)
-                                cur_a_f += sum(da_f_dt)
-                                cur_v_2 += sum(dv_2_dt)
+
+                                su.values[t+1] = cur_su + float(sum(dsu_dt))
+                                e.values[t+1] = cur_e + float(sum(de_dt))
+                                a.values[t+1] = cur_a + float(sum(da_dt))
+                                r_a.values[t+1] = cur_r_a + float(sum(dr_a_dt))
+                                p.values[t+1] = cur_p + float(sum(dp_dt))
+                                sy.values[t+1] = cur_sy + float(sum(dsy_dt))
+                                c.values[t+1] = cur_c + float(sum(dc_dt))
+                                r_c.values[t+1] = cur_r_c + float(sum(dr_c_dt))
+                                h.values[t+1] = cur_h + float(sum(dh_dt))
+                                r_h.values[t+1] = cur_r_h + float(sum(dr_h_dt))
+                                i.values[t+1] = cur_i + float(sum(di_dt))
+                                r_i.values[t+1] = cur_r_i + float(sum(dr_i_dt))
+                                r.values[t+1] = cur_r + float(sum(dr_dt))
+                                d.values[t+1] = cur_d + float(sum(dd_dt))
+                                cases.values[t+1] = cur_cases + float(sum(dcases_dt))
+                                f_1.values[t+1] = cur_f_1 + sum(df_1_dt)
+                                f_2.values[t+1] = cur_f_2 + sum(df_2_dt)
+                                e_f.values[t+1] = cur_e_f + sum(de_f_dt)
+                                a_f.values[t+1] = cur_a_f + sum(da_f_dt)
+                                v_2.values[t+1] = cur_v_2 + sum(dv_2_dt)
+                                v_1.values[t + 1] = cur_v_1
                             else:
                                 su, e, a, r_a, p, sy, c, r_c, h, r_h, i, r_i, r, d, cases = population[gv][ev][wv][hv]
                                 cur_su = su.values[t]
@@ -539,33 +543,33 @@ class Model(object):
                                 else 0.0
                             dying_o_h = cur_o_h * self.death_rates[(gv, age_groups[el])] if state not in i_2_indexes \
                                 else 0.0
-                            dm_s_dt = {previous_growing_m_s * (1-self.morbidity_frac) *
+                            dm_s_dt = {previous_growing_m_s * (1-self.morbidity_frac[ev]) *
                                        (1-self.med_degrees[(gv, age_groups[el])]['M_TO_O']),
-                                       previous_growing_o_s * (1 - self.morbidity_frac) *
+                                       previous_growing_o_s * (1 - self.morbidity_frac[ev]) *
                                        (self.med_degrees[(gv, age_groups[el])]['O_TO_M']),
                                        -growing_m_s,
                                        -dying_m_s}
-                            do_s_dt = {previous_growing_o_s * (1 - self.morbidity_frac) *
+                            do_s_dt = {previous_growing_o_s * (1 - self.morbidity_frac[ev]) *
                                        (1 - self.med_degrees[(gv, age_groups[el])]['O_TO_M']),
-                                       previous_growing_m_s * (1 - self.morbidity_frac) *
+                                       previous_growing_m_s * (1 - self.morbidity_frac[ev]) *
                                        (self.med_degrees[(gv, age_groups[el])]['M_TO_O']),
                                        -growing_o_s,
                                        -dying_o_s}
 
-                            dm_h_dt = {previous_growing_m_s * self.morbidity_frac *
+                            dm_h_dt = {previous_growing_m_s * self.morbidity_frac[ev] *
                                        (1-self.med_degrees[(gv, age_groups[el])]['M_TO_O']),
                                        previous_growing_m_h * (1 - self.med_degrees[(gv, age_groups[el])]['M_TO_O']),
                                        previous_growing_o_h * (self.med_degrees[(gv, age_groups[el])]['O_TO_M']),
-                                       previous_growing_o_s * (1-self.morbidity_frac) *
+                                       previous_growing_o_s * (1-self.morbidity_frac[ev]) *
                                        (self.med_degrees[(gv, age_groups[el])]['O_TO_M']),
                                         -growing_m_h,
                                         -dying_m_h}
 
-                            do_h_dt = {previous_growing_o_s * self.morbidity_frac *
+                            do_h_dt = {previous_growing_o_s * self.morbidity_frac[ev] *
                                        (1 - self.med_degrees[(gv, age_groups[el])]['O_TO_M']),
                                        previous_growing_m_h * (1 - self.med_degrees[(gv, age_groups[el])]['M_TO_O']),
                                        previous_growing_o_h * (self.med_degrees[(gv, age_groups[el])]['O_TO_M']),
-                                       previous_growing_m_s * self.morbidity_frac *
+                                       previous_growing_m_s * self.morbidity_frac[ev] *
                                        self.med_degrees[(gv, age_groups[el])]['M_TO_O'],
                                        -growing_o_h,
                                        -dying_o_h}

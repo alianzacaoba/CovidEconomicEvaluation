@@ -376,17 +376,18 @@ c_beta_ant = 0.0
 c_death_ant = 0.0
 n_iteration = 0
 # 'Beta': 0.008140019590906994, 'DC': 1.9830377761558986, 'Error': 0.7050015812639594
+n_cases = 150
 while c_beta_ant != c_beta_base or c_death_ant != c_death_base:
     c_beta_ant = c_beta_base
     c_death_ant = c_death_base
     n_iteration +=1
     print('Cycle number:', n_iteration)
-    r = calibration_model.run_calibration(initial_cases=60, beta_inf=c_beta_inf, beta_base=c_beta_base,
+    r = calibration_model.run_calibration(initial_cases=n_cases, beta_inf=c_beta_inf, beta_base=c_beta_base,
                                           beta_sup=c_beta_sup, death_inf=c_death_inf, death_base=c_death_base,
                                           death_sup=c_death_sup, total=True, iteration = n_iteration)
     c_beta_base = r['Best']['Beta']
     c_death_base = r['Best']['DC']
-
+    n_cases = round(n_cases*0.9)
 end_processing_s_t = time.process_time()
 end_time_t = datetime.datetime.now()
 print('Performance: {0}'.format(end_processing_s_t - start_processing_s_t))

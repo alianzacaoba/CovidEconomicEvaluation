@@ -15,7 +15,7 @@ vaccine_priority = [["e7", "M", "H"], ["e6", "M", "H"], ["e5", "M", "H"], ["e4",
                     ["e6", "O", "S"], ["e5", "O", "S"], ["e4", "O", "S"], ["e3", "O", "S"], ["e2", "O", "S"],
                     ["e1", "O", "S"], ["e0", "O", "S"]]
 vaccine_effectiveness = pd.read_csv('input\\vaccine_effectiveness_example.csv',sep=';',index_col=[0, 1])
-vaccine_effectiveness = vaccine_effectiveness.to_dict()['VACCINE_EFFECTIVENESS']
+vaccine_effectiveness = vaccine_effectiveness.to_dict(orient='index')
 vaccine_information = pd.read_csv('input\\region_capacities.csv', sep=';', index_col=[0]).to_dict()
 model_ex.run(type_params=type_paramsA, name='vac_test', run_type='vaccination', beta=0.007832798540690137,
              sim_length=365*3, vaccine_priority=vaccine_priority, vaccine_effectiveness=vaccine_effectiveness,

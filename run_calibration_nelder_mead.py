@@ -42,19 +42,22 @@ class Calibration(object):
         x = np.random.triangular(beta_inf, beta_base, beta_sup, size=initial_cases)
         x2 = np.random.triangular(death_inf, death_base, death_sup, size=initial_cases)
         i = 0
-        print('Initial iteration', int(i + 1), 'Beta', beta_base, 'DC', death_base)
-        sim_results = self.model.run(self.type_params, name='Calibration' + str(i), run_type='calibration',
-                                     beta=beta_base, death_coefficient=death_base, calculated_arrival=True,
-                                     sim_length=236)[14:237]
-        if not total:
-            sim_results_alt = sim_results.copy()
-            for k in range(1, len(sim_results)):
-                sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
-            del sim_results_alt
-        y = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
-                  np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
-        print('Error:', y)
-        v_1 = {'Beta': x[i], 'DC': x2[i], 'Error': y}
+        if len(self.ideal_values) > 0:
+            v_1 = self.ideal_values
+        else:
+            print('Initial iteration', int(i + 1), 'Beta', x[i], 'DC', x2[i])
+            sim_results = self.model.run(self.type_params, name='Calibration' + str(i), run_type='calibration',
+                                         beta=x[i], death_coefficient=x2[i], calculated_arrival=True,
+                                         sim_length=236)[14:237]
+            if not total:
+                sim_results_alt = sim_results.copy()
+                for k in range(1, len(sim_results)):
+                    sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
+                del sim_results_alt
+            y = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
+                      np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
+            print('Error:', y)
+            v_1 = {'Beta': x[i], 'DC': x2[i], 'Error': y}
         if v_1 not in self.results:
             self.results.append(v_1)
         self.current_results.append(v_1)
@@ -138,7 +141,8 @@ class Calibration(object):
 
         i = initial_cases
         n_shrinks = 0
-        while n_shrinks < max_shrinks and v_1 != v_2 and v_2 != v_3:
+        n_no_changes = 0
+        while n_shrinks < max_shrinks and v_1 != v_2 and v_2 != v_3 and n_no_changes < 10:
             i += 1
             print('Nelder-Mead iteration', int(i + 1))
             current_best_values = [v_1, v_2, v_3]
@@ -156,27 +160,28 @@ class Calibration(object):
                 self.current_results.append(v_2)
             if v_3 not in self.results:
                 self.current_results.append(v_3)
+            n_no_changes = n_no_changes + 1 if (v_1 == current_best_values[0] and v_2 == current_best_values[1]) else 0
             print('Current best results: ', v_1)
         self.ideal_values = v_1
         print('Optima found: ', v_1)
         results = {'Best': v_1, 'Values': self.current_results}
         results_pd = pd.DataFrame(self.current_results)
         with open('output\\calibration_nm_results_' + ('total' if total else 'new') + str(iteration) + '.json', 'w') \
-                as fp:
-            json.dump(results, fp)
+                as fp_a:
+            json.dump(results, fp_a)
         values = [results_pd.columns] + list(results_pd.values)
         wb = Workbook()
         wb.new_sheet('All_values', data=values)
-        wb.save('output\\calibration_nm_results2_' + ('total' if total else 'new') + str(iteration) + '.xlsx')
-        print('Excel ', 'output\\calibration_nm_results2_' + ('total' if total else 'new') + '.xlsx', 'exported')
+        wb.save('output\\calibration_nm_results_' + ('total' if total else 'new') + str(iteration) + '.xlsx')
+        print('Excel ', 'output\\calibration_nm_results_2_' + ('total' if total else 'new') + '.xlsx', 'exported')
 
         end_processing_s = time.process_time()
         end_time = datetime.datetime.now()
         print('Performance: {0}'.format(end_processing_s - start_processing_s))
         this_time_diff = (end_time - start_time)
         this_execution_time = this_time_diff.total_seconds()
-        this_mm = int(execution_time / 60)
-        this_ss = int(execution_time % 60)
+        this_mm = int(this_execution_time / 60)
+        this_ss = int(this_execution_time % 60)
         print('Execution Time: {0} minutes {1} seconds'.format(this_mm, this_ss))
         print('Execution Time: {0} milliseconds'.format(this_execution_time * 1000))
         return results
@@ -407,8 +412,9 @@ c_death_ant = 0.0
 n_iteration = 0
 # 'Beta': 0.008140019590906994, 'DC': 1.9830377761558986, 'Error': 0.7050015812639594
 n_cases = 150
+c_total = True
 while c_beta_ant != c_beta_base or c_death_ant != c_death_base:
-    if c_beta_ant + c_death_ant > 0:
+    if len(calibration_model.ideal_values) > 0:
         c_beta_sup = (c_beta_base+c_beta_sup)/2
         c_beta_inf = (c_beta_base+c_beta_inf)/2
         c_death_sup = (c_death_base + c_death_sup) / 2
@@ -419,9 +425,9 @@ while c_beta_ant != c_beta_base or c_death_ant != c_death_base:
     print('Cycle number:', n_iteration)
     r = calibration_model.run_calibration(initial_cases=n_cases, beta_inf=c_beta_inf, beta_base=c_beta_base,
                                           beta_sup=c_beta_sup, death_inf=c_death_inf, death_base=c_death_base,
-                                          death_sup=c_death_sup, total=True, iteration=n_iteration, max_shrinks=2)
-    c_beta_base = r['Best']['Beta']
-    c_death_base = r['Best']['DC']
+                                          death_sup=c_death_sup, total=c_total, iteration=n_iteration, max_shrinks=2)
+    c_beta_base = calibration_model.ideal_values['Beta']
+    c_death_base = calibration_model.ideal_values['DC']
     n_cases = round(n_cases*0.9)
 end_processing_s_t = time.process_time()
 end_time_t = datetime.datetime.now()
@@ -433,6 +439,11 @@ ss = int(execution_time % 60)
 print('Total Execution Time: {0} minutes {1} seconds'.format(mm, ss))
 print('Total Execution Time: {0} milliseconds'.format(execution_time * 1000))
 print('Total cycles:', n_iteration)
-with open('output\\calibration_consolidated_results_.json', 'w') as fp:
+with open('output\\calibration_consolidated_results_2' + ('total' if c_total else 'new') + '.json', 'w') as fp:
     json.dump(calibration_model.results, fp)
-
+results_pd_c = pd.from_dict(calibration_model.results)
+c_values = [results_pd_c.columns] + list(results_pd_c.values)
+c_wb = Workbook()
+c_wb.new_sheet('All_values', data=c_values)
+c_wb.save('output\\calibration_nm_results_' + ('total' if c_total else 'new') + '.xlsx')
+print('Excel ', 'output\\calibration_consolidated_results_2_' + ('total' if c_total else 'new') + '.xlsx', 'exported')

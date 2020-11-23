@@ -159,7 +159,7 @@ class Model(object):
         arrival_rate = self.arrival_rate['CALCULATED_RATE'].copy() if calculated_arrival else \
             self.arrival_rate['SYMPTOMATIC_RATE'].copy()
         # 0) SU, 1) E, 2) A, 3) R_A, 4) P, 5) Sy, 6) C, 7) R_C, 8) H, 9) R_H, 10)I, 11) R_I 12) R, 13) D, 14)Cases,
-        # 15) F1, 16) F2, 17) V1, 18) V2, 19) EF, 20) AF
+        # 15) F1, 16) F2, 17) V1, 18) V2, 19) EF, 20) AF  15(NV)-21(V)) Home cases
         i_1_indexes = [2, 4, 5, 20] if run_type == 'vaccination' else [2, 4, 5]
         i_2_indexes = [6, 7, 8, 9, 10, 11]
         candidates_indexes = [0, 1, 2, 3, 15, 17] if run_type == 'vaccination' else [0, 1, 2, 3]
@@ -219,6 +219,8 @@ class Model(object):
                             compartments.append(e_f)
                             a_f = Compartment('Asymptomatic_Failure')
                             compartments.append(a_f)
+                        home_cases = Compartment('Home_Cases')
+                        compartments.append(home_cases)
                         population_w[hv] = compartments
                     population_e[wv] = population_w
                 population_g[ev] = population_e
@@ -278,8 +280,8 @@ class Model(object):
                         for hv in health_groups:
                             if run_type == 'vaccination':
                                 # Bring relevant population
-                                su, e, a, r_a, p, sy, c, r_c, h, r_h, i, r_i, r, d, cases, f_1, f_2, v_1, v_2, e_f, a_f\
-                                    = population[gv][ev][wv][hv]
+                                su, e, a, r_a, p, sy, c, r_c, h, r_h, i, r_i, r, d, cases, f_1, f_2, v_1, v_2, e_f, \
+                                    a_f, h_c = population[gv][ev][wv][hv]
                                 cur_su = su.values[t]
                                 cur_e = e.values[t]
                                 cur_a = a.values[t]
@@ -400,6 +402,7 @@ class Model(object):
                                 dcases_dt = {cur_e * p_s[ev] / t_e}
                                 dv_2_dt = {cur_a_f/t_a}
 
+                                h_c.values[t + 1] = cur_sy * p_h[ev][hv] / t_sy
                                 su.values[t+1] = cur_su + float(sum(dsu_dt))
                                 e.values[t+1] = cur_e + float(sum(de_dt))
                                 a.values[t+1] = cur_a + float(sum(da_dt))
@@ -422,7 +425,8 @@ class Model(object):
                                 v_2.values[t+1] = cur_v_2 + sum(dv_2_dt)
                                 v_1.values[t + 1] = cur_v_1
                             else:
-                                su, e, a, r_a, p, sy, c, r_c, h, r_h, i, r_i, r, d, cases = population[gv][ev][wv][hv]
+                                su, e, a, r_a, p, sy, c, r_c, h, r_h, i, r_i, r, d, cases, h_c \
+                                    = population[gv][ev][wv][hv]
                                 cur_su = su.values[t]
                                 cur_e = e.values[t]
                                 cur_a = a.values[t]
@@ -489,37 +493,23 @@ class Model(object):
                                          }
                                 dcases_dt = {cur_e * p_s[ev] / t_e
                                              }
-                                cur_su += float(sum(dsu_dt))
-                                cur_e += float(sum(de_dt))
-                                cur_a += float(sum(da_dt))
-                                cur_r_a += float(sum(dr_a_dt))
-                                cur_p += float(sum(dp_dt))
-                                cur_sy += float(sum(dsy_dt))
-                                cur_c += float(sum(dc_dt))
-                                cur_r_c += float(sum(dr_c_dt))
-                                cur_h += float(sum(dh_dt))
-                                cur_r_h += float(sum(dr_h_dt))
-                                cur_i += float(sum(di_dt))
-                                cur_r_i += float(sum(dr_i_dt))
-                                cur_r += float(sum(dr_dt))
-                                cur_d += float(sum(dd_dt))
-                                cur_cases += float(sum(dcases_dt))
 
-                                su.values[t + 1] = cur_su
-                                e.values[t + 1] = cur_e
-                                a.values[t + 1] = cur_a
-                                r_a.values[t + 1] = cur_r_a
-                                p.values[t + 1] = cur_p
-                                sy.values[t + 1] = cur_sy
-                                c.values[t + 1] = cur_c
-                                r_c.values[t + 1] = cur_r_c
-                                h.values[t + 1] = cur_h
-                                r_h.values[t + 1] = cur_r_h
-                                i.values[t + 1] = cur_i
-                                r_i.values[t + 1] = cur_r_i
-                                r.values[t + 1] = cur_r
-                                d.values[t + 1] = cur_d
-                                cases.values[t + 1] = cur_cases
+                                su.values[t + 1] = cur_su + float(sum(dsu_dt))
+                                e.values[t + 1] = cur_e + float(sum(de_dt))
+                                a.values[t + 1] = cur_a + float(sum(da_dt))
+                                r_a.values[t + 1] = cur_r_a + float(sum(dr_a_dt))
+                                p.values[t + 1] = cur_p + float(sum(dp_dt))
+                                sy.values[t + 1] = cur_sy + float(sum(dsy_dt))
+                                c.values[t + 1] = cur_c + float(sum(dc_dt))
+                                r_c.values[t + 1] = cur_r_c + float(sum(dr_c_dt))
+                                h.values[t + 1] = cur_h + float(sum(dh_dt))
+                                r_h.values[t + 1] = cur_r_h + float(sum(dr_h_dt))
+                                i.values[t + 1] = cur_i + float(sum(di_dt))
+                                r_i.values[t + 1] = cur_r_i + float(sum(dr_i_dt))
+                                r.values[t + 1] = cur_r + float(sum(dr_dt))
+                                d.values[t + 1] = cur_d + float(sum(dd_dt))
+                                cases.values[t + 1] = cur_cases + float(sum(dcases_dt))
+                                h_c.values[t + 1] = cur_sy * p_h[ev][hv] / t_sy
                 # Demographics / Health degrees
                 if run_type != 'calibration':
                     births = self.birth_rates[gv]*dep_pob[gv]
@@ -671,7 +661,7 @@ class Model(object):
             with open('output\\result_' + name + '.json', 'w') as fp:
                 json.dump(pop_dict, fp)
             print('JSon ', 'output\\result_' + name + '.json', 'exported')
-            pop_pandas.to_csv('output\\result_' + name + '.csv', index = False)
+            pop_pandas.to_csv('output\\result_' + name + '.csv', index=False)
             print('CSV ', 'output\\result_' + name + '.csv', 'exported')
             print('Begin excel exportation')
             wb = Workbook()

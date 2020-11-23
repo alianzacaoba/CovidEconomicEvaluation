@@ -22,3 +22,15 @@ model_ex.run(type_params=type_paramsA, name='vac_test', run_type='vaccination', 
              vaccine_capacities=vaccine_information['VACCINE_CAPACITY'],
              vaccine_start_day=vaccine_information['VACCINE_START_DAY'],
              vaccine_end_day=vaccine_information['VACCINE_END_DAY'])
+
+model_ex.run(type_params=type_paramsA, name='no_vac_test', run_type='no_vaccination', beta=0.007832798540690137,
+             sim_length=365*3, vaccine_priority=vaccine_priority, vaccine_effectiveness=vaccine_effectiveness,
+             vaccine_capacities=vaccine_information['VACCINE_CAPACITY'],
+             vaccine_start_day=vaccine_information['VACCINE_START_DAY'],
+             vaccine_end_day=vaccine_information['VACCINE_END_DAY'])
+
+model_ex.run(type_params=type_paramsA, name='cal_test', run_type='calibration', beta=0.007832798540690137,
+             sim_length=365*3, vaccine_priority=vaccine_priority, vaccine_effectiveness=vaccine_effectiveness,
+             vaccine_capacities=vaccine_information['VACCINE_CAPACITY'],
+             vaccine_start_day=vaccine_information['VACCINE_START_DAY'],
+             vaccine_end_day=vaccine_information['VACCINE_END_DAY'])

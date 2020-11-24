@@ -17,18 +17,16 @@ def calculate_vaccine_assignments(department_population: dict, day: int, vaccine
     assignation = dict()
     for group in vaccine_priority:
         ev, wv, hv = group
-        assigned = 0
+        assigned = 0.0
         if remaining_vaccines > 0.0:
             candidates = sum(department_population[ev][wv][hv][cv].values[day] for cv in candidates_indexes)
             if candidates > 0:
                 assigned = min(remaining_vaccines, candidates)
                 remaining_vaccines -= assigned
                 assigned /= candidates
-        assignation_e = assignation.get(ev, dict())
-        assignation_w = assignation_e.get(wv, dict())
-        assignation_w[hv] = assigned
-        assignation_e[wv] = assignation_w
-        assignation[ev] = assignation_e
+        assignation[(ev, wv, hv)] = assigned
+        if assigned == 0:
+            return assignation
     return assignation
 
 
@@ -113,18 +111,21 @@ class Model(object):
     def run(self, type_params: dict, name: str = 'Iteration', run_type: str = 'vaccination', beta: float = 0.5,
             death_coefficient: float = 1.0, vaccine_priority: list = None, vaccine_capacities: dict = None,
             vaccine_effectiveness: dict = None, vaccine_start_day: dict = None, vaccine_end_day: dict = None,
-            calculated_arrival: bool = True, sim_length: int = 236, movement_coefficient: float = 0.01):
+            calculated_arrival: bool = True, sim_length: int = 236, movement_coefficient: float = 0.01,
+            vaccine_cost: float = 1.0, home_treatment_cost: float = 10.0, hospital_treatment_cost: float = 100.0,
+            icu_treatment_cost: float = 1000.0, daly_vector: dict = None):
         # run_type:
         #   1) 'calibration': for calibration purposes, states f1,f2,v1,v2,e_f,a_f do not exist
         #   2) 'vaccination': model with vaccine states
         # SU, E, A, R_A, P, Sy, C, H, I, R, D, Cases
-        if vaccine_priority is None:
-            vaccine_priority = []
         population = dict()
         departments = self.departments
         age_groups = self.age_groups
         work_groups = self.work_groups
         health_groups = self.health_groups
+        if daly_vector is None:
+            daly_vector = {'Home': 0.2, 'Hospital': 0.3, 'ICU': 0.5, 'Death': 1, 'Recovered': 0.1}
+    
         t_e = self.time_params['t_e']['ALL'][type_params['t_e']]
         t_p = self.time_params['t_p']['ALL'][type_params['t_p']]
         t_sy = self.time_params['t_sy']['ALL'][type_params['t_sy']]
@@ -153,9 +154,9 @@ class Model(object):
                 p_c[ev][hv] = self.prob_params['p_c'][ev][hv][type_params['p_c']]
                 p_h[ev][hv] = self.prob_params['p_h'][ev][hv][type_params['p_h']]
                 p_i[ev][hv] = 1 - p_c[ev][hv] - p_h[ev][hv]
-                p_c_d[ev][hv] = death_coefficient*self.prob_params['p_c_d'][ev][hv][type_params['p_c_d']]
-                p_h_d[ev][hv] = death_coefficient*self.prob_params['p_h_d'][ev][hv][type_params['p_h_d']]
-                p_i_d[ev][hv] = death_coefficient*self.prob_params['p_i_d'][ev][hv][type_params['p_i_d']]
+                p_c_d[ev][hv] = min(death_coefficient*self.prob_params['p_c_d'][ev][hv][type_params['p_c_d']], 1.0)
+                p_h_d[ev][hv] = min(death_coefficient*self.prob_params['p_h_d'][ev][hv][type_params['p_h_d']], 1.0)
+                p_i_d[ev][hv] = min(death_coefficient*self.prob_params['p_i_d'][ev][hv][type_params['p_i_d']], 1.0)
 
         arrival_rate = self.arrival_rate['CALCULATED_RATE'].copy() if calculated_arrival else \
             self.arrival_rate['SYMPTOMATIC_RATE'].copy()
@@ -220,8 +221,23 @@ class Model(object):
                             compartments.append(e_f)
                             a_f = Compartment('Asymptomatic_Failure')
                             compartments.append(a_f)
+                            day_vaccines = Compartment('Day_Vaccines')
+                            compartments.append(day_vaccines)
                         home_cases = Compartment('Home_Cases')
                         compartments.append(home_cases)
+                        if run_type != 'calibration':
+                            home_treatment_costs = Compartment('Home_Treatment_Costs')
+                            compartments.append(home_treatment_costs)
+                            hospital_treatment_costs = Compartment('Hospital_Treatment_Costs')
+                            compartments.append(hospital_treatment_costs)
+                            icu_treatment_costs = Compartment('ICU_Treatment_Costs')
+                            compartments.append(icu_treatment_costs)
+                            vaccine_costs = Compartment('Vaccine_Costs')
+                            compartments.append(vaccine_costs)
+                            total_costs = Compartment('Total_Costs')
+                            compartments.append(total_costs)
+                            total_daly = Compartment('Total_Daly')
+                            compartments.append(total_daly)
                         population_w[hv] = compartments
                     population_e[wv] = population_w
                 population_g[ev] = population_e
@@ -282,7 +298,8 @@ class Model(object):
                             if run_type == 'vaccination':
                                 # Bring relevant population
                                 su, e, a, r_a, p, sy, c, r_c, h, r_h, i, r_i, r, d, cases, f_1, f_2, v_1, v_2, e_f, \
-                                    a_f, h_c = population[gv][ev][wv][hv]
+                                    a_f, day_v, h_c, c_t_c, h_t_c, i_t_c, v_c, t_c, daly = population[gv][ev][wv][hv]
+
                                 cur_su = su.values[t]
                                 cur_e = e.values[t]
                                 cur_a = a.values[t]
@@ -308,30 +325,42 @@ class Model(object):
                                           cur_r_h + cur_i + cur_r_i + cur_r + cur_f_1 + cur_f_2 + cur_v_1 + cur_v_2 + \
                                           cur_e_f + cur_a_f
                                 # Run vaccination
+                                day_v.values[t + 1] = 0.0
+                                v_c.values[t + 1] = 0.0
+
                                 if vaccine_assignments is not None:
-                                    dsu_dt = {-cur_su * vaccine_assignments[ev][wv][hv]}
-                                    df_1_dt = {-cur_f_1 * vaccine_assignments[ev][wv][hv],
+                                    dsu_dt = {-cur_su * vaccine_assignments.get((ev, wv, hv), 0)}
+                                    df_1_dt = {-cur_f_1 * vaccine_assignments.get((ev, wv, hv), 0),
                                                cur_su * (1 - vaccine_effectiveness[(ev, hv)]['VACCINE_EFFECTIVENESS_1'])
-                                               * vaccine_assignments[ev][wv][hv]
+                                               * vaccine_assignments.get((ev, wv, hv), 0)
                                                }
                                     df_2_dt = {cur_f_1 * (1 - vaccine_effectiveness[(ev, hv)]['VACCINE_EFFECTIVENESS_2']
-                                                          ) * vaccine_assignments[ev][wv][hv]
+                                                          ) * vaccine_assignments.get((ev, wv, hv), 0)
                                                }
-                                    de_dt = {-cur_e * vaccine_assignments[ev][wv][hv]}
-                                    da_dt = {-cur_a * vaccine_assignments[ev][wv][hv]}
-                                    da_f_dt = {cur_e*(1-p_s[ev])*vaccine_assignments[ev][wv][hv]}
-                                    dr_a_dt = {-cur_r_a*vaccine_assignments[ev][wv][hv]}
-                                    dv_1_dt = {-cur_v_1*vaccine_assignments[ev][wv][hv],
+                                    de_dt = {-cur_e * vaccine_assignments.get((ev, wv, hv), 0)}
+                                    da_dt = {-cur_a * vaccine_assignments.get((ev, wv, hv), 0)}
+                                    da_f_dt = {cur_e*(1-p_s[ev])*vaccine_assignments.get((ev, wv, hv), 0)}
+                                    dr_a_dt = {-cur_r_a*vaccine_assignments.get((ev, wv, hv), 0)}
+                                    dv_1_dt = {-cur_v_1*vaccine_assignments.get((ev, wv, hv), 0),
                                                vaccine_effectiveness[(ev, hv)]['VACCINE_EFFECTIVENESS_1']
-                                               * vaccine_assignments[ev][wv][hv],
-                                               cur_a*vaccine_assignments[ev][wv][hv],
-                                               cur_r_a*vaccine_assignments[ev][wv][hv]
+                                               * vaccine_assignments.get((ev, wv, hv), 0),
+                                               cur_a*vaccine_assignments.get((ev, wv, hv), 0),
+                                               cur_r_a*vaccine_assignments.get((ev, wv, hv), 0)
                                                }
-                                    dv_2_dt = {cur_v_1*vaccine_assignments[ev][wv][hv],
+                                    dv_2_dt = {cur_v_1*vaccine_assignments.get((ev, wv, hv), 0),
                                                cur_f_1*vaccine_effectiveness[(ev, hv)]['VACCINE_EFFECTIVENESS_2']
-                                               * vaccine_assignments[ev][wv][hv]
+                                               * vaccine_assignments.get((ev, wv, hv), 0)
+                                               }
+                                    dd_v_dt = {cur_su * vaccine_assignments.get((ev, wv, hv), 0),
+                                               cur_f_1 * vaccine_assignments.get((ev, wv, hv), 0),
+                                               cur_e * vaccine_assignments.get((ev, wv, hv), 0),
+                                               cur_a * vaccine_assignments.get((ev, wv, hv), 0),
+                                               cur_r_a * vaccine_assignments.get((ev, wv, hv), 0),
+                                               cur_v_1 * vaccine_assignments.get((ev, wv, hv), 0)
                                                }
 
+                                    day_v.values[t + 1] = sum(dd_v_dt)
+                                    v_c.values[t + 1] = day_v.values[t + 1]*vaccine_cost
                                     cur_su += sum(dsu_dt)
                                     cur_f_1 += sum(df_1_dt)
                                     cur_f_2 += sum(df_2_dt)
@@ -425,9 +454,21 @@ class Model(object):
                                 a_f.values[t+1] = cur_a_f + sum(da_f_dt)
                                 v_2.values[t+1] = cur_v_2 + sum(dv_2_dt)
                                 v_1.values[t + 1] = cur_v_1
+
+                                c_t_c.values[t + 1] = h_c.values[t + 1]*home_treatment_cost
+                                h_t_c.values[t + 1] = (h.values[t + 1]+r_h.values[t + 1])*hospital_treatment_cost
+                                i_t_c.values[t + 1] = (i.values[t + 1]+r_i.values[t + 1])*icu_treatment_cost
+                                t_c.values[t + 1] = v_c.values[t + 1] + c_t_c.values[t + 1] + h_t_c.values[t + 1] + \
+                                                    i_t_c.values[t + 1]
+                                daly.values[t+1] = sum([(c.values[t+1] + r_c.values[t+1])*daly_vector['Home'],
+                                                       (h.values[t + 1]+r_h.values[t + 1])*daly_vector['Hospital'],
+                                                       (i.values[t + 1]+r_i.values[t + 1])*daly_vector['ICU'],
+                                                       (r.values[t + 1]) * daly_vector['Recovered'],
+                                                       (d.values[t + 1]) * daly_vector['Death']])
+
                             else:
-                                su, e, a, r_a, p, sy, c, r_c, h, r_h, i, r_i, r, d, cases, h_c \
-                                    = population[gv][ev][wv][hv]
+                                su, e, a, r_a, p, sy, c, r_c, h, r_h, i, r_i, r, d, cases, h_c, c_t_c, h_t_c, i_t_c, \
+                                    v_c, t_c, daly = population[gv][ev][wv][hv]
                                 cur_su = su.values[t]
                                 cur_e = e.values[t]
                                 cur_a = a.values[t]
@@ -494,7 +535,7 @@ class Model(object):
                                          }
                                 dcases_dt = {cur_e * p_s[ev] / t_e
                                              }
-
+                                v_c.values[t + 1] = 0.0
                                 su.values[t + 1] = cur_su + float(sum(dsu_dt))
                                 e.values[t + 1] = cur_e + float(sum(de_dt))
                                 a.values[t + 1] = cur_a + float(sum(da_dt))
@@ -511,6 +552,17 @@ class Model(object):
                                 d.values[t + 1] = cur_d + float(sum(dd_dt))
                                 cases.values[t + 1] = cur_cases + float(sum(dcases_dt))
                                 h_c.values[t + 1] = cur_sy * p_h[ev][hv] / t_sy
+                                c_t_c.values[t + 1] = h_c.values[t + 1] * home_treatment_cost
+                                h_t_c.values[t + 1] = (h.values[t + 1] + r_h.values[t + 1]) * hospital_treatment_cost
+                                i_t_c.values[t + 1] = (i.values[t + 1] + r_i.values[t + 1]) * icu_treatment_cost
+                                t_c.values[t + 1] = v_c.values[t + 1] + c_t_c.values[t + 1] + h_t_c.values[t + 1] + \
+                                                    i_t_c.values[t + 1]
+                                daly.values[t + 1] = sum([(c.values[t + 1] + r_c.values[t + 1]) * daly_vector['Home'],
+                                                          (h.values[t + 1] + r_h.values[t + 1]) * daly_vector[
+                                                              'Hospital'],
+                                                          (i.values[t + 1] + r_i.values[t + 1]) * daly_vector['ICU'],
+                                                          (r.values[t + 1]) * daly_vector['Recovered'],
+                                                          (d.values[t + 1]) * daly_vector['Death']])
                 # Demographics / Health degrees
                 if run_type != 'calibration':
                     births = self.birth_rates[gv]*dep_pob[gv]
@@ -675,6 +727,7 @@ class Model(object):
             values = [pop_pandas_current.columns] + list(pop_pandas_current.values)
             print('Excel exportation country results')
             wb.new_sheet('Country_results', data=values)
+            print('Saving excel results', 'output\\result_' + name + '.xlsx')
             wb.save('output\\result_' + name + '.xlsx')
             print('Excel ', 'output\\result_' + name + '.xlsx', 'exported')
             return pop_pandas

@@ -1,11 +1,10 @@
-from model_run import Model
+from model import Model
 from pyexcelerate import Workbook
 import numpy as np
 import pandas as pd
 import datetime
 import json
 import time
-
 
 
 class Calibration(object):

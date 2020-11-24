@@ -128,10 +128,10 @@ class Model(object):
         t_e = self.time_params['t_e']['ALL'][type_params['t_e']]
         t_p = self.time_params['t_p']['ALL'][type_params['t_p']]
         t_sy = self.time_params['t_sy']['ALL'][type_params['t_sy']]
-        t_r = self.time_params['t_r']['ALL'][type_params['t_r']]
         t_a = self.time_params['t_a']['ALL'][type_params['t_a']]
         initial_sus = self.prob_params['initial_sus']['ALL']['ALL'][type_params['initial_sus']]
         t_d = dict()
+        t_r = dict()
         p_s = dict()
         p_c = dict()
         p_h = dict()
@@ -141,6 +141,7 @@ class Model(object):
         p_i_d = dict()
         for ev in age_groups:
             t_d[ev] = self.time_params['t_d'][ev][type_params['t_d']]
+            t_r[ev] = self.time_params['t_r'][ev][type_params['t_r']]
             p_s[ev] = self.prob_params['p_s'][ev]['ALL'][type_params['p_s']]
             p_c[ev] = dict()
             p_h[ev] = dict()
@@ -377,23 +378,23 @@ class Model(object):
                                          -cur_c / t_d[ev]
                                          }
                                 dr_c_dt = {cur_c * (1 - p_c_d[ev][hv]) / t_d[ev],
-                                           -cur_r_c / (t_r - t_d[ev])
+                                           -cur_r_c / (t_r[ev] - t_d[ev])
                                            }
                                 dh_dt = {cur_sy * p_h[ev][hv] / t_sy,
                                          -cur_h / t_d[ev]
                                          }
                                 dr_h_dt = {cur_h * (1 - p_h_d[ev][hv]) / t_d[ev],
-                                           -cur_r_h / (t_r - t_d[ev])
+                                           -cur_r_h / (t_r[ev] - t_d[ev])
                                            }
                                 di_dt = {cur_sy * p_i[ev][hv] / t_sy,
                                          -cur_i / t_d[ev]
                                          }
                                 dr_i_dt = {cur_i * (1 - p_i_d[ev][hv]) / t_d[ev],
-                                           -cur_r_i / (t_r - t_d[ev])
+                                           -cur_r_i / (t_r[ev] - t_d[ev])
                                            }
-                                dr_dt = {cur_r_c / (t_r - t_d[ev]),
-                                         cur_r_h / (t_r - t_d[ev]),
-                                         cur_r_i / (t_r - t_d[ev])
+                                dr_dt = {cur_r_c / (t_r[ev] - t_d[ev]),
+                                         cur_r_h / (t_r[ev] - t_d[ev]),
+                                         cur_r_i / (t_r[ev] - t_d[ev])
                                          }
                                 dd_dt = {cur_c * p_c_d[ev][hv] / t_d[ev],
                                          cur_h * p_h_d[ev][hv] / t_d[ev],
@@ -469,23 +470,23 @@ class Model(object):
                                          -cur_c / t_d[ev]
                                          }
                                 dr_c_dt = {cur_c * (1 - p_c_d[ev][hv]) / t_d[ev],
-                                           -cur_r_c / (t_r - t_d[ev])
+                                           -cur_r_c / (t_r[ev] - t_d[ev])
                                            }
                                 dh_dt = {cur_sy * p_h[ev][hv] / t_sy,
                                          -cur_h / t_d[ev]
                                          }
                                 dr_h_dt = {cur_h * (1 - p_h_d[ev][hv]) / t_d[ev],
-                                           -cur_r_h / (t_r - t_d[ev])
+                                           -cur_r_h / (t_r[ev] - t_d[ev])
                                            }
                                 di_dt = {cur_sy * p_i[ev][hv] / t_sy,
                                          -cur_i / t_d[ev]
                                          }
                                 dr_i_dt = {cur_i * (1 - p_i_d[ev][hv]) / t_d[ev],
-                                           -cur_r_i / (t_r - t_d[ev])
+                                           -cur_r_i / (t_r[ev] - t_d[ev])
                                            }
-                                dr_dt = {cur_r_c / (t_r - t_d[ev]),
-                                         cur_r_h / (t_r - t_d[ev]),
-                                         cur_r_i / (t_r - t_d[ev])
+                                dr_dt = {cur_r_c / (t_r[ev] - t_d[ev]),
+                                         cur_r_h / (t_r[ev] - t_d[ev]),
+                                         cur_r_i / (t_r[ev] - t_d[ev])
                                          }
                                 dd_dt = {cur_c * p_c_d[ev][hv] / t_d[ev],
                                          cur_h * p_h_d[ev][hv] / t_d[ev],

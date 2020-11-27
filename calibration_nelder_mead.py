@@ -10,165 +10,172 @@ import time
 class Calibration(object):
     def __init__(self):
         self.model = Model()
-        self.ideal_values = dict()
+        self.ideal_values = None
         self.results = list()
-        self.current_results = ()
+        self.current_results = list()
         self.type_params = dict()
         for pv in self.model.time_params:
-            self.type_params[pv] = 'BASE_VALUE'
+            self.type_params[pv[0]] = 'BASE_VALUE'
         for pv in self.model.prob_params:
-            self.type_params[pv] = 'BASE_VALUE'
+            self.type_params[pv[0]] = 'BASE_VALUE'
         self.real_cases = pd.read_csv('input\\real_cases.csv', sep=';')
+        self.real_deaths = pd.read_csv('input\\death_cases.csv', sep=';')
 
-    @staticmethod
-    def __obtain_thetas__(x: np.array, y: np.array):
-        try:
-            x_matrix = np.column_stack((np.power(x, 2), x, np.ones(x.shape[0])))
-            return np.dot(np.linalg.inv(np.dot(np.transpose(x_matrix), x_matrix)), np.dot(np.transpose(x_matrix), y))
-        except Exception as e:
-            print('Error obtain_thetas: {0}'.format(e))
-            return dict()
-
-    def run_calibration(self, initial_cases: int = 30, beta_inf: float = 0.0, beta_base: float = 0.05,
-                        beta_sup: float = 1.0, death_inf: float = 0.0, death_base: float = 1, death_sup: float = 2.6,
-                        total: bool = True, iteration: int = 1, max_shrinks: int = 5):
+    def run_calibration(self, beta_range: list, death_range: list, arrival_range: list, dates: dict,
+                        dimensions: int = 18, initial_cases: int = 30, total: bool = True, iteration: int = 1,
+                        max_shrinks: int = 5, max_no_improvement: int = 100, min_value_to_iterate: float = 10000.0):
         start_processing_s = time.process_time()
         start_time = datetime.datetime.now()
-        self.current_results = list()
-        real_case = np.transpose(np.array(([self.real_cases['cases_total'], self.real_cases['deaths_total']] if total
-                                          else [self.real_cases['cases_new'], self.real_cases['deaths_new']]),
-                                          dtype='float64'))
-        real_case[real_case == 0] = 0.01
-        x = np.random.triangular(beta_inf, beta_base, beta_sup, size=initial_cases)
-        x2 = np.random.triangular(death_inf, death_base, death_sup, size=initial_cases)
-        i = 0
-        if len(self.ideal_values) > 0:
-            v_1 = self.ideal_values
-        else:
-            print('Initial iteration', int(i + 1), 'Beta', x[i], 'DC', x2[i])
-            sim_results = self.model.run(self.type_params, name='Calibration' + str(i), run_type='calibration',
-                                         beta=x[i], death_coefficient=x2[i], calculated_arrival=True,
-                                         sim_length=236)[14:237]
-            if not total:
-                sim_results_alt = sim_results.copy()
-                for k in range(1, len(sim_results)):
-                    sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
-                del sim_results_alt
-            y = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
-                      np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
-            print('Error:', y)
-            v_1 = {'Beta': x[i], 'DC': x2[i], 'Error': y}
-        if v_1 not in self.results:
-            self.results.append(v_1)
-        self.current_results.append(v_1)
-        print('Current best results: ', v_1)
-        i = 1
-        print('Initial iteration', int(i + 1), 'Beta', x[i], 'DC', x2[i])
-        sim_results = self.model.run(self.type_params, name='Calibration' + str(i), run_type='calibration', beta=x[i],
-                                     death_coefficient=x2[i], calculated_arrival=True, sim_length=236)[14:237]
-        if not total:
-            sim_results_alt = sim_results.copy()
-            for k in range(1, len(sim_results)):
-                sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
-            del sim_results_alt
-        y = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
-                  np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
-        print('Error:', y)
-        v_new = {'Beta': x[i], 'DC': x2[i], 'Error': y}
-        if v_new not in self.results:
-            self.results.append(v_new)
-        self.current_results.append(v_new)
+        real_case = np.array((self.real_cases[['TOTAL_1', 'TOTAL_2', 'TOTAL_3', 'TOTAL_4', 'TOTAL_5', 'TOTAL_6']]
+                              if total else self.real_cases[['NEW_1', 'NEW_2', 'NEW_3', 'NEW_4', 'NEW_5', 'NEW_6']]),
+                             dtype='float64')
+        real_death = np.array((self.real_deaths[['TOTAL_1', 'TOTAL_2', 'TOTAL_3', 'TOTAL_4', 'TOTAL_5', 'TOTAL_6']]
+                               if total else self.real_deaths[['NEW_1', 'NEW_2', 'NEW_3', 'NEW_4', 'NEW_5', 'NEW_6']]),
+                              dtype='float64')
+        x_beta = list()
+        x_d_c = list()
+        x_arrival = list()
+        beta = list()
+        dc = list()
+        arrival = list()
+        for i in range(6):
+            x_beta.append(np.random.triangular(beta_range[1][i]*0.95, beta_range[1][i], beta_range[1][i]*1.05,
+                                               size=initial_cases))
+            x_d_c.append(np.random.triangular(death_range[1][i]*.95, death_range[1][i], death_range[1][i]*1.05,
+                                               size=initial_cases))
+            x_arrival.append(np.random.triangular(arrival_range[1][i]*.95, arrival_range[1][i],
+                                                  arrival_range[1][i]*1.05, size=initial_cases))
+            beta.append(beta_range[1][i])
+            dc.append(death_range[1][i])
+            arrival.append(arrival_range[1][i])
 
-        if v_new['Error'] < v_1['Error']:
-            v_2 = v_1
-            v_1 = v_new
-        else:
-            v_2 = v_new
-        print('Current best results: ', v_1)
-        i = 2
-        print('Initial iteration', int(i + 1), 'Beta', x[i], 'DC', x2[i])
-        sim_results = self.model.run(self.type_params, name='Calibration' + str(i), run_type='calibration', beta=x[i],
-                                     death_coefficient=x2[i], calculated_arrival=True, sim_length=236)[14:237]
+        print('Initial iteration', int(1))
+        print('Parameters \n Beta:', beta, '\n DC:', dc, '\n Arrivals:', arrival)
+        sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration',
+                                     beta=beta, death_coefficient=dc, arrival_coefficient=arrival,
+                                     sim_length=236)
         if not total:
             sim_results_alt = sim_results.copy()
             for k in range(1, len(sim_results)):
+                print(sim_results[k])
                 sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
             del sim_results_alt
-        y = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
-                  np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
-        print('Error:', y)
-        v_new = {'Beta': x[i], 'DC': x2[i], 'Error': y}
+        error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
+                                              real_case[dates['days_cases'][i+1]:, i]-1, 2)) for i in range(6)))
+        error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6+i] /
+                                              real_death[dates['days_deaths'][i+1]:, i] - 1, 2)) for i in range(6)))
+        error = float(error_cases + error_deaths)
+        print('Cases error:', error_cases, 'Deaths error:', error_deaths, 'Total error:', error)
+        v_new = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
+                 'error_deaths': error_deaths, 'error': error}
         if v_new not in self.results:
             self.results.append(v_new)
+        self.current_results = list()
         self.current_results.append(v_new)
-        if v_new['Error'] < v_1['Error']:
-            v_3 = v_2
-            v_2 = v_1
-            v_1 = v_new
-        elif v_new['Error'] < v_2['Error']:
-            v_3 = v_2
-            v_2 = v_new
+        if self.ideal_values is None:
+            best_error = error
+            self.ideal_values = v_new
+        elif self.ideal_values['error'] > error:
+            best_error = error
+            self.ideal_values = v_new
         else:
-            v_3 = v_new
-        print('Current best results: ', v_1)
-        for i in range(3, initial_cases):
-            print('Initial iteration', int(i + 1), 'Beta', x[i], 'DC', x2[i])
+            best_error = self.ideal_values['error']
+        print('Current best results:')
+        print(self.ideal_values)
+        for i in range(initial_cases):
+            print('Initial iteration', int(i + 2))
+            beta = [x_beta[0][i], x_beta[1][i], x_beta[2][i], x_beta[3][i], x_beta[4][i], x_beta[5][i]]
+            dc = [x_d_c[0][i], x_d_c[1][i], x_d_c[2][i], x_d_c[3][i], x_d_c[4][i], x_d_c[5][i]]
+            arrival = [x_arrival[0][i], x_arrival[1][i], x_arrival[2][i], x_arrival[3][i], x_arrival[4][i],
+                       x_arrival[5][i]]
+            print('Parameters \n Beta:', beta, '\n DC:', dc, '\n Arrivals:', arrival)
+
             sim_results = self.model.run(self.type_params, name='Calibration' + str(i), run_type='calibration',
-                                         beta=x[i], death_coefficient=x2[i],
-                                         calculated_arrival=True, sim_length=236)[14:237]
+                                         beta=beta, death_coefficient=dc, arrival_coefficient=arrival,
+                                         sim_length=236)
             if not total:
                 sim_results_alt = sim_results.copy()
                 for k in range(1, len(sim_results)):
                     sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
                 del sim_results_alt
-            y = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
-                      np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
-            print('Error:', y)
-            v_new = {'Beta': x[i], 'DC': x2[i], 'Error': y}
+            error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
+                                                        real_case[dates['days_cases'][i+1]:, i] - 1, 2)) for i in
+                                    range(6)))
+            error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
+                                                         real_death[dates['days_deaths'][i+1]:, i] - 1, 2)) for i in
+                                     range(6)))
+            error = float(error_cases + error_deaths)
+            print('Cases error:', error_cases, 'Deaths error:', error_deaths, 'Total error:', error)
+            v_new = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
+                     'error_deaths': error_deaths, 'error': error}
             if v_new not in self.results:
                 self.results.append(v_new)
-            self.current_results.append(v_new)
-            if v_new['Error'] < v_1['Error']:
-                v_3 = v_2
-                v_2 = v_1
-                v_1 = v_new
-            elif v_new['Error'] < v_2['Error']:
-                v_3 = v_2
-                v_2 = v_new
-            else:
-                v_3 = v_new
-            print('Current best results: ', v_1)
+            if v_new not in self.current_results:
+                self.current_results.append(v_new)
 
-        i = initial_cases
-        n_shrinks = 0
-        n_no_changes = 0
-        while n_shrinks < max_shrinks and v_1 != v_2 and v_2 != v_3 and n_no_changes < 10:
-            i += 1
-            print('Nelder-Mead iteration', int(i + 1))
-            current_best_values = [v_1, v_2, v_3]
-            nelder_mead_result = self.nelder_mead_iteration(best_values=current_best_values, real_case=real_case,
-                                                            total=total)
-            if nelder_mead_result['shrink']:
-                n_shrinks += 1
-                print('n_shrinks: ', n_shrinks)
+            if best_error > error:
+                best_error = error
+                self.ideal_values = v_new
             else:
-                n_shrinks = 0
-            v_1, v_2, v_3 = nelder_mead_result['values']
-            if v_1 not in self.current_results:
-                self.current_results.append(v_1)
-            if v_2 not in self.current_results:
-                self.current_results.append(v_2)
-            if v_3 not in self.results:
-                self.current_results.append(v_3)
-            n_no_changes = n_no_changes + 1 if (v_1 == current_best_values[0] and v_2 == current_best_values[1]) else 0
-            print('Current best results: ', v_1)
-        self.ideal_values = v_1
-        print('Optima found: ', v_1)
-        results = {'Best': v_1, 'Values': self.current_results}
-        results_pd = pd.DataFrame(self.current_results)
+                best_error = self.ideal_values['error']
+            print('Current best results:')
+            print(self.ideal_values)
+
+        best_results = pd.DataFrame(self.current_results)
+        best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(dimensions+1)
+        best_results = best_results.to_dict(orient='index')
+
+        if self.ideal_values['error'] < min_value_to_iterate:
+            i = initial_cases
+            n_shrinks = 0
+            n_no_changes = 0
+            while n_shrinks < max_shrinks and n_no_changes < max_no_improvement:
+                i += 1
+                print('Nelder-Mead iteration', int(i + 1))
+                nelder_mead_result = self.nelder_mead_iteration(best_values=best_results, real_case=real_case,
+                                                                real_death=real_death, dates=dates, total=total,
+                                                                n_relevant=dimensions)
+                if nelder_mead_result['shrink']:
+                    n_shrinks += 1
+                    print('n_shrinks: ', n_shrinks)
+                else:
+                    n_shrinks = 0
+                best_results_n = nelder_mead_result['values']
+                for vi in best_results_n:
+                    if best_results_n[vi] not in self.current_results:
+                        self.current_results.append(best_results_n[vi])
+                equal = True
+                for vi in range(5):
+                    if best_results_n[vi] != best_results[vi]:
+                        equal = False
+                n_no_changes = n_no_changes + 1 if equal else 0
+                best_results = best_results_n
+                self.ideal_values = best_results[0]
+                print('Current best results:')
+                print(best_results)
+                print('No improvement in top 5 results in :', n_no_changes, 'iterations')
+        else:
+            print('Insufficient error value to iterate over NMS: ', self.ideal_values['error'])
+        print('Optimum found:')
+        print(self.ideal_values)
+        organized_results = list()
+        for result in self.current_results:
+            organized_result = dict()
+            current = result
+            for i in range(6):
+                organized_result['beta_'+str(i)] = current['beta'][i]
+            for i in range(6):
+                organized_result['dc_' + str(i)] = current['dc'][i]
+            for i in range(6):
+                organized_result['arrival_' + str(i)] = current['arrival'][i]
+            organized_result['error_cases'] = current['error_cases']
+            organized_result['error_deaths'] = current['error_deaths']
+            organized_result['error'] = current['error']
+            organized_results.append(organized_result)
+        results_pd = pd.DataFrame(organized_results)
         with open('output\\calibration_nm_results_' + ('total' if total else 'new') + str(iteration) + '.json', 'w') \
                 as fp_a:
-            json.dump(results, fp_a)
+            json.dump(self.current_results, fp_a)
         values = [results_pd.columns] + list(results_pd.values)
         wb = Workbook()
         wb.new_sheet('All_values', data=values)
@@ -184,214 +191,226 @@ class Calibration(object):
         this_ss = int(this_execution_time % 60)
         print('Execution Time: {0} minutes {1} seconds'.format(this_mm, this_ss))
         print('Execution Time: {0} milliseconds'.format(this_execution_time * 1000))
-        return results
 
-    def nelder_mead_iteration(self, best_values: list, real_case: np.array,  alpha: float = 1.0, beta: float = 0.5,
-                              gamma: float = 2.0, delta: float = 0.5, total: bool = True):
-        v_1 = best_values[0]
-        v_2 = best_values[1]
-        v_3 = best_values[2]
-        w_1 = abs(v_1['Error']-v_3['Error'])/(((v_1['Beta']-v_3['Beta'])**2 + (v_1['DC']-v_3['DC'])**2)**0.5)
-        w_2 = abs(v_2['Error'] - v_3['Error']) / \
-              (((v_2['Beta'] - v_3['Beta']) ** 2 + (v_2['DC'] - v_3['DC']) ** 2) ** 0.5)
-        worst_point = np.array([v_3['Beta'], v_3['DC']])
-        centroid = np.array([(w_1*v_1['Beta']+w_2*v_2['Beta'])/(w_1+w_2), (w_1*v_1['DC']+w_2*v_2['DC'])/(w_1+w_2)])
-        print(v_1, v_2, v_3)
+    def nelder_mead_iteration(self, best_values: dict, real_case: np.array,  real_death: np.array, dates: dict,
+                              n_relevant: int, alpha: float = 1.0, beta_p: float = 0.5, gamma: float = 2.0,
+                              delta: float = 0.5, total: bool = True):
+        weights = list()
+        worst_point = best_values[n_relevant]
+        np_worst_point = np.array([worst_point['beta'], worst_point['dc'], worst_point['arrival']])
+        for vi in range(len(best_values)-1):
+            weights.append(float(abs(best_values[vi]['error']-worst_point['error']) /
+                           (sum(sum((best_values[vi][var][i]-worst_point[var][i])**2 for i in range(6))
+                             for var in ['beta', 'dc', 'arrival'])**0.5)))
+        centroid = {'beta': [], 'dc': [], 'arrival': []}
+        for i in range(6):
+            centroid['beta'].append(sum(best_values[vi]['beta'][i]*weights[vi] for vi in range(n_relevant)) /
+                                    sum(weights))
+            centroid['dc'].append(sum(best_values[vi]['dc'][i] * weights[vi] for vi in range(n_relevant)) /
+                                  sum(weights))
+            centroid['arrival'].append(sum(best_values[vi]['arrival'][i] * weights[vi]
+                                           for vi in range(n_relevant)) / sum(weights))
+        np_centroid = np.array(list(centroid.values()))
+        print('Considered centroid')
         print(centroid)
         shrink = False
-        # Reflection
-        reflection_point = centroid - alpha*(centroid-worst_point)
-        reflection_point[0] = max(reflection_point[0], 0)
-        reflection_point[1] = max(reflection_point[1], 0)
-        sim_results = self.model.run(self.type_params, name='Calibration', run_type='calibration',
-                                     beta=float(reflection_point[0]), death_coefficient=float(reflection_point[1]),
-                                     calculated_arrival=True, sim_length=236)[14:237]
+        reflection_point = np.maximum(np_centroid - alpha*(np_centroid-np_worst_point), 0.0)
+        beta = reflection_point[0, :].tolist()
+        dc = reflection_point[0, :].tolist()
+        arrival = reflection_point[0, :].tolist()
+        sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
+                                     death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
         if not total:
             sim_results_alt = sim_results.copy()
             for k in range(1, len(sim_results)):
-                sim_results[k, :] = sim_results_alt[k, :] - sim_results_alt[k - 1, :]
+                print(sim_results[k])
+                sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
             del sim_results_alt
-        y = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
-                  np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
-        v_new = {'Beta': reflection_point[0], 'DC': reflection_point[1], 'Error': y}
-        if v_new not in self.results:
-            self.results.append(v_new)
-        if y < v_1['Error']:
-            # Expansion
-            expansion_point = centroid - gamma*(centroid-worst_point)
-            expansion_point[0] = max(expansion_point[0], 0)
-            expansion_point[1] = max(expansion_point[1], 0)
-            sim_results = self.model.run(self.type_params, name='Calibration', run_type='calibration',
-                                         beta=float(expansion_point[0]), death_coefficient=float(expansion_point[1]),
-                                         calculated_arrival=True, sim_length=236)[14:237]
+        error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
+                                                    real_case[dates['days_cases'][i+1]:, i] - 1, 2)) for i in range(6)))
+        error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
+                                                     real_death[dates['days_deaths'][i+1]:, i] - 1, 2)) for i in
+                                 range(6)))
+        error = float(error_cases + error_deaths)
+        v_reflection = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
+                 'error_deaths': error_deaths, 'error': error}
+
+        if v_reflection not in self.results:
+            self.results.append(v_reflection)
+        if v_reflection['error'] < best_values[0]['error']:
+            exists = False
+            for vi in best_values:
+                if v_reflection == best_values[vi]:
+                    exists = True
+            if not exists:
+                best_values[len(best_values)] = v_reflection
+            expansion_point = np.maximum(np_centroid - gamma*(np_centroid-np_worst_point), 0.0)
+            beta = expansion_point[0, :].tolist()
+            dc = expansion_point[0, :].tolist()
+            arrival = expansion_point[0, :].tolist()
+            sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
+                                         death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
             if not total:
                 sim_results_alt = sim_results.copy()
                 for k in range(1, len(sim_results)):
-                    sim_results[k, :] = sim_results_alt[k, :] - sim_results_alt[k - 1, :]
+                    print(sim_results[k])
+                    sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
                 del sim_results_alt
-            y2 = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
-                       np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
-            v_new = {'Beta': expansion_point[0], 'DC': expansion_point[1], 'Error': y2}
-            if v_new not in self.results:
-                self.results.append(v_new)
-            if y2 < y:
-                v_3 = v_1
-                v_2 = {'Beta': float(reflection_point[0]), 'DC': float(reflection_point[1]), 'Error': y}
-                v_1 = {'Beta': float(expansion_point[0]), 'DC': float(expansion_point[1]), 'Error': y2}
-            else:
-                v_3 = v_1
-                v_2 = {'Beta': float(expansion_point[0]), 'DC': float(expansion_point[1]), 'Error': y2}
-                v_1 = {'Beta': float(reflection_point[0]), 'DC': float(reflection_point[1]), 'Error': y}
-        elif y < v_2['Error']:
-            v_3 = v_2
-            v_2 = {'Beta': float(reflection_point[0]), 'DC': float(reflection_point[1]), 'Error': y}
-        elif y < v_3['Error']:
+            error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
+                                                        real_case[dates['days_cases'][i+1]:, i] - 1, 2)) for i in
+                                    range(6)))
+            error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
+                                                         real_death[dates['days_deaths'][i+1]:, i] - 1, 2)) for i in
+                                     range(6)))
+            error = float(error_cases + error_deaths)
+            v_expansion = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
+                            'error_deaths': error_deaths, 'error': error}
+            if v_expansion not in self.results:
+                self.results.append(v_expansion)
+            if v_expansion['error'] < v_reflection['error']:
+                exists = False
+                for vi in best_values:
+                    if v_expansion == best_values[vi]:
+                        exists = True
+                if not exists:
+                    best_values[len(best_values)] = v_expansion
+        elif v_reflection['error'] < best_values[1]['error']:
+            exists = False
+            for vi in best_values:
+                if v_reflection == best_values[vi]:
+                    exists = True
+            if not exists:
+                best_values[len(best_values)] = v_reflection
+        elif v_reflection['error'] < worst_point['error']:
             # Outside contraction
-            outside_contraction_point = centroid + beta*(centroid-worst_point)
-            outside_contraction_point[0] = max(outside_contraction_point[0], 0)
-            outside_contraction_point[1] = max(outside_contraction_point[1], 0)
-            sim_results = self.model.run(self.type_params, name='Calibration', run_type='calibration',
-                                         beta=float(outside_contraction_point[0]),
-                                         death_coefficient=float(outside_contraction_point[1]), calculated_arrival=True,
-                                         sim_length=236)[14:237]
+            outside_contraction_point = np.maximum(np_centroid + beta_p*(np_centroid-np_worst_point), 0.0)
+            beta = outside_contraction_point[0, :].tolist()
+            dc = outside_contraction_point[0, :].tolist()
+            arrival = outside_contraction_point[0, :].tolist()
+            sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
+                                         death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
             if not total:
                 sim_results_alt = sim_results.copy()
                 for k in range(1, len(sim_results)):
-                    sim_results[k, :] = sim_results_alt[k, :] - sim_results_alt[k - 1, :]
+                    print(sim_results[k])
+                    sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
                 del sim_results_alt
-            y3 = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
-                       np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
-            v_new = {'Beta': outside_contraction_point[0], 'DC': outside_contraction_point[1], 'Error': y3}
-            if v_new not in self.results:
-                self.results.append(v_new)
-            if y3 < y:
-                if y3 < v_1['Error']:
-                    v_3 = v_2
-                    v_2 = v_2
-                    v_1 = {'Beta': float(outside_contraction_point[0]), 'DC': float(outside_contraction_point[1]),
-                           'Error': y3}
-                elif y3 < v_2['Error']:
-                    v_3 = v_2
-                    v_2 = {'Beta': float(outside_contraction_point[0]), 'DC': float(outside_contraction_point[1]),
-                           'Error': y3}
-                elif y3 < v_3['Error']:
-                    v_3 = {'Beta': float(outside_contraction_point[0]), 'DC': float(outside_contraction_point[1]),
-                           'Error': y3}
+            error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
+                                                        real_case[dates['days_cases'][i+1]:, i] - 1, 2)) for i in
+                                    range(6)))
+            error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
+                                                         real_death[dates['days_deaths'][i+1]:, i] - 1, 2)) for i in
+                                     range(6)))
+            error = float(error_cases + error_deaths)
+            v_outside_contraction = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
+                           'error_deaths': error_deaths, 'error': error}
+
+            if v_outside_contraction not in self.results:
+                self.results.append(v_outside_contraction)
+            if v_outside_contraction['error'] < v_reflection['error']:
+                exists = False
+                for vi in best_values:
+                    if v_outside_contraction == best_values[vi]:
+                        exists = True
+                if not exists:
+                    best_values[len(best_values)] = v_outside_contraction
             else:
                 # Shrink
                 shrink = True
-                v_1_vec = np.array([v_1['Beta'], v_1['DC']])
-                new_v = np.array([v_2['Beta'], v_2['DC']])
-                new_v = new_v + delta*(new_v-v_1_vec)
-                new_v[0] = max(new_v[0], 0)
-                new_v[1] = max(new_v[1], 0)
-                sim_results = self.model.run(self.type_params, name='Calibration', run_type='calibration',
-                                             beta=float(new_v[0]), death_coefficient=float(new_v[1]),
-                                             calculated_arrival=True, sim_length=236)[14:237]
-                if not total:
-                    sim_results_alt = sim_results.copy()
-                    for k in range(1, len(sim_results)):
-                        sim_results[k, :] = sim_results_alt[k, :] - sim_results_alt[k - 1, :]
-                    del sim_results_alt
-                y_s = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
-                                  np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
-                v_2 = {'Beta': float(new_v[0]), 'DC': float(new_v[1]), 'Error': y_s}
-                if v_2 not in self.results:
-                    self.results.append(v_2)
-                new_v = np.array([v_3['Beta'], v_3['DC']])
-                new_v = new_v + delta * (new_v - v_1_vec)
-                new_v[0] = max(new_v[0], 0)
-                new_v[1] = max(new_v[1], 0)
-                sim_results = self.model.run(self.type_params, name='Calibration', run_type='calibration',
-                                             beta=float(new_v[0]), death_coefficient=float(new_v[1]),
-                                             calculated_arrival=True, sim_length=236)[14:237]
-                if not total:
-                    sim_results_alt = sim_results.copy()
-                    for k in range(1, len(sim_results)):
-                        sim_results[k, :] = sim_results_alt[k, :] - sim_results_alt[k - 1, :]
-                    del sim_results_alt
-                y_s = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
-                                  np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
-                v_3 = {'Beta': float(new_v[0]), 'DC': float(new_v[1]), 'Error': y_s}
-                if v_3 not in self.results:
-                    self.results.append(v_3)
-                if v_3['Error'] < v_2['Error']:
-                    v_2_temp = v_3
-                    v_3 = v_2
-                    v_2 = v_2_temp
-                if v_2['Error'] < v_1['Error']:
-                    v_1_temp = v_2
-                    v_2 = v_1
-                    v_1 = v_1_temp
-                    if v_3['Error'] < v_2['Error']:
-                        v_2_temp = v_3
-                        v_3 = v_2
-                        v_2 = v_2_temp
+                np_best_point = np.array([best_values[0]['beta'], best_values[0]['dc'], best_values[0]['arrival']])
+                for i in range(n_relevant):
+                    np_point = np.array([best_values[i+1]['beta'], best_values[i+1]['dc'], best_values[i+1]['arrival']])
+                    shrink_point = np.maximum(np_point + delta*(np_point-np_best_point), 0.0)
+                    beta = shrink_point[0, :].tolist()
+                    dc = shrink_point[0, :].tolist()
+                    arrival = shrink_point[0, :].tolist()
+                    sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration',
+                                                 beta=beta,
+                                                 death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
+                    if not total:
+                        sim_results_alt = sim_results.copy()
+                        for k in range(1, len(sim_results)):
+                            print(sim_results[k])
+                            sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
+                        del sim_results_alt
+                    error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
+                                                                real_case[dates['days_cases'][i+1]:, i] - 1, 2))
+                                            for i in range(6)))
+                    error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
+                                                                 real_death[dates['days_deaths'][i+1]:, i] - 1, 2))
+                                             for i in range(6)))
+                    error = float(error_cases + error_deaths)
+                    v_shrink = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
+                                             'error_deaths': error_deaths, 'error': error}
+                    if v_shrink not in self.results:
+                        self.results.append(v_shrink)
+                    best_values[i + 1] = v_shrink
         else:
             # Inside contraction point
-            inside_contraction_point = centroid - beta * (centroid - worst_point)
-            inside_contraction_point[0] = max(inside_contraction_point[0], 0)
-            inside_contraction_point[1] = max(inside_contraction_point[1], 0)
-            sim_results = self.model.run(self.type_params, name='Calibration', run_type='calibration',
-                                         beta=float(inside_contraction_point[0]),
-                                         death_coefficient=float(inside_contraction_point[1]), calculated_arrival=True,
-                                         sim_length=236)[14:237]
+            inside_contraction_point = np.maximum(np_centroid + beta_p * (np_centroid - np_worst_point), 0.0)
+            beta = inside_contraction_point[0, :].tolist()
+            dc = inside_contraction_point[0, :].tolist()
+            arrival = inside_contraction_point[0, :].tolist()
+            sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
+                                         death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
             if not total:
                 sim_results_alt = sim_results.copy()
                 for k in range(1, len(sim_results)):
-                    sim_results[k, :] = sim_results_alt[k, :] - sim_results_alt[k - 1, :]
+                    print(sim_results[k])
+                    sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
                 del sim_results_alt
-            y4 = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
-                       np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
-            v_new = {'Beta': inside_contraction_point[0], 'DC': inside_contraction_point[1], 'Error': y4}
-            if v_new not in self.results:
-                self.results.append(v_new)
-            if y4 < v_1['Error']:
-                v_3 = v_2
-                v_2 = v_1
-                v_1 = {'Beta': float(inside_contraction_point[0]), 'DC': float(inside_contraction_point[1]),
-                       'Error': y4}
-            elif y4 < v_2['Error']:
-                v_3 = v_2
-                v_2 = {'Beta': float(inside_contraction_point[0]), 'DC': float(inside_contraction_point[1]),
-                       'Error': y4}
-            elif y4 < v_3['Error']:
-                v_3 = {'Beta': float(inside_contraction_point[0]), 'DC': float(inside_contraction_point[1]),
-                       'Error': y4}
+            error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
+                                                        real_case[dates['days_cases'][i+1]:, i] - 1, 2)) for i in
+                                    range(6)))
+            error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
+                                                         real_death[dates['days_deaths'][i+1]:, i] - 1, 2)) for i in
+                                     range(6)))
+            error = float(error_cases + error_deaths)
+            v_inside_contraction = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
+                                     'error_deaths': error_deaths, 'error': error}
+
+            if v_inside_contraction not in self.results:
+                self.results.append(v_inside_contraction)
+            if v_inside_contraction['error'] < worst_point['error']:
+                exists = False
+                for vi in best_values:
+                    if v_inside_contraction == best_values[vi]:
+                        exists = True
+                if not exists:
+                    best_values[len(best_values)] = v_inside_contraction
             else:
                 # Shrink
                 shrink = True
-                v_1_vec = np.array([v_1['Beta'], v_1['DC']])
-                new_v = np.array([v_2['Beta'], v_2['DC']])
-                new_v = new_v + delta*(new_v-v_1_vec)
-                new_v[0] = max(new_v[0], 0)
-                new_v[1] = max(new_v[1], 0)
-                sim_results = self.model.run(self.type_params, name='Calibration', run_type='calibration',
-                                             beta=float(new_v[0]), death_coefficient=float(new_v[1]),
-                                             calculated_arrival=True, sim_length=236)[14:237]
-                if not total:
-                    sim_results_alt = sim_results.copy()
-                    for k in range(1, len(sim_results)):
-                        sim_results[k, :] = sim_results_alt[k, :] - sim_results_alt[k - 1, :]
-                    del sim_results_alt
-                y_s = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
-                            np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
-                v_2 = {'Beta': float(new_v[0]), 'DC': float(new_v[1]), 'Error': y_s}
-                if v_2 not in self.results:
-                    self.results.append(v_2)
-                new_v = np.array([v_3['Beta'], v_3['DC']])
-                new_v = new_v + delta * (new_v - v_1_vec)
-                sim_results = self.model.run(self.type_params, name='Calibration', run_type='calibration',
-                                             beta=float(new_v[0]), death_coefficient=float(new_v[1]),
-                                             calculated_arrival=True, sim_length=236)[14:237]
-                if not total:
-                    sim_results_alt = sim_results.copy()
-                    for k in range(1, len(sim_results)):
-                        sim_results[k, :] = sim_results_alt[k, :] - sim_results_alt[k - 1, :]
-                    del sim_results_alt
-                y_s = float(np.average(np.power(sim_results[0:, 0] / real_case[0:, 0] - 1, 2)) +
-                            np.average(np.power(sim_results[29:, 1] / real_case[29:, 1] - 1, 2)))
-                v_3 = {'Beta': float(new_v[0]), 'DC': float(new_v[1]), 'Error': y_s}
-                if v_3 not in self.results:
-                    self.results.append(v_3)
-        return {'values': [v_1, v_2, v_3], 'shrink': shrink}
+                np_best_point = np.array([best_values[0]['beta'], best_values[0]['dc'], best_values[0]['arrival']])
+                for i in range(n_relevant):
+                    np_point = np.array(
+                        [best_values[i + 1]['beta'], best_values[i + 1]['dc'], best_values[i + 1]['arrival']])
+                    shrink_point = np.maximum(np_point + delta * (np_point - np_best_point), 0)
+                    beta = shrink_point[0, :].tolist()
+                    dc = shrink_point[0, :].tolist()
+                    arrival = shrink_point[0, :].tolist()
+                    sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration',
+                                                 beta=beta,
+                                                 death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
+                    if not total:
+                        sim_results_alt = sim_results.copy()
+                        for k in range(1, len(sim_results)):
+                            print(sim_results[k])
+                            sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
+                        del sim_results_alt
+                    error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
+                                                                real_case[dates['days_cases'][i+1]:, i] - 1, 2))
+                                            for i in range(6)))
+                    error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
+                                                                 real_death[dates['days_deaths'][i+1]:, i] - 1, 2))
+                                             for i in range(6)))
+                    error = float(error_cases + error_deaths)
+                    v_shrink = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
+                                'error_deaths': error_deaths, 'error': error}
+                    if v_shrink not in self.results:
+                        self.results.append(v_shrink)
+                    best_values[i + 1] = v_shrink
+        best_values = pd.DataFrame(best_values).T
+        best_values = best_values.sort_values(by='error', ascending=True, ignore_index=True).head(n_relevant + 1)
+        best_values = best_values.to_dict(orient='index')
+        return {'values': best_values, 'shrink': shrink}

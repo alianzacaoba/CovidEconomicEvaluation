@@ -1,10 +1,10 @@
 from pyexcelerate import Workbook
 from calibration_nelder_mead import Calibration
 import pandas as pd
+import numpy as np
 import datetime
 import json
 import time
-import numpy as np
 
 start_processing_s_t = time.process_time()
 start_time_t = datetime.datetime.now()
@@ -16,7 +16,7 @@ c_death_inf = np.ones(6)
 c_death_base = np.ones(6)*1.5  # 1.9830377761558986
 c_death_sup = np.ones(6)*2.2
 c_arrival_inf = np.ones(6)*1.0
-c_arrival_base = np.ones(6)*4.0
+c_arrival_base = np.ones(6)*1.0
 c_arrival_sup = np.ones(6)*10
 calibration_model = Calibration()
 c_beta_ant = 0.0
@@ -32,35 +32,19 @@ days_cases = {1: 23, 2: 20, 3: 18, 4: 30, 5: 22, 6: 55}
 n_cases = 10*(len(c_beta_base) + len(c_death_base) + len(c_arrival_base))+1
 c_total = True
 changed = True
-error_ant = np.ones(5)*100000000000000
+error_ant = 100000000000000
 while changed:
-    c_beta_ant = c_beta_base
-    c_death_ant = c_death_base
-    c_arrival_ant = c_arrival_base
     n_iteration += 1
     print('Cycle number:', n_iteration)
     calibration_model.run_calibration(initial_cases=n_cases, beta_range=[c_beta_inf, c_beta_base, c_beta_sup],
                                       death_range=[c_death_inf, c_death_base, c_death_sup],
                                       arrival_range=[c_arrival_inf, c_arrival_base, c_arrival_sup],
                                       dates={'days_cases': days_cases, 'days_deaths': days_deaths}, total=c_total,
-                                      iteration=n_iteration, max_shrinks=5, max_no_improvement=50)
-    c_beta_base = calibration_model.ideal_values['beta']
-    c_death_base = calibration_model.ideal_values['dc']
-    c_arrival_base = calibration_model.ideal_values['arrival']
+                                      iteration=n_iteration+100, max_shrinks=5, max_no_improvement=50,
+                                      min_value_to_iterate=1000)
+    c_arrival_base += 1
+    changed = (error_ant > calibration_model.ideal_values['error'])
 
-    for i in range(6):
-        c_beta_sup[i] = (c_beta_base[i] + c_beta_sup[i]) / 2
-        c_beta_inf[i] = (c_beta_base[i] + c_beta_inf[i]) / 2
-        c_death_sup[i] = (c_death_base[i] + c_death_sup[i]) / 2
-        c_death_inf[i] = (c_death_base[i] + c_death_inf[i]) / 2
-        c_arrival_sup[i] = (c_arrival_sup[i] + c_arrival_base[i]) / 2
-        c_arrival_inf[i] = (c_arrival_inf[i] + c_arrival_base[i]) / 2
-    changed = False
-    for i in range(5):
-        if calibration_model.current_results[i]['error'] < error_ant[i]:
-            changed = True
-            error_ant[i] = calibration_model.current_results[i]['error']
-    n_cases = max(round(n_cases*0.8),  2*(len(c_beta_base) + len(c_death_base) + len(c_arrival_base))+1)
 end_processing_s_t = time.process_time()
 end_time_t = datetime.datetime.now()
 print('Performance: {0}'.format(end_processing_s_t - start_processing_s_t))

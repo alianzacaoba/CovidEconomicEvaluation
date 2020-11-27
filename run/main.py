@@ -1,6 +1,7 @@
-from model import Model
+from logic.model import Model
 import pandas as pd
 
+from root import DIR_INPUT
 
 model_ex = Model()
 type_paramsA = dict()
@@ -9,14 +10,14 @@ for pv in model_ex.time_params:
 for pv in model_ex.prob_params:
     type_paramsA[pv[0]] = 'BASE_VALUE'
 
-priority_vaccine_df = pd.read_csv('input\\priority_vaccines.csv', sep=';')
+priority_vaccine_df = pd.read_csv(DIR_INPUT + 'priority_vaccines.csv', sep=';')
 priority_vaccine_scenarios = dict()
 for index, row in priority_vaccine_df.iterrows():
     priority_vaccine_scenarios[row['SCENARIO']] = priority_vaccine_scenarios.get(row['SCENARIO'], list())
     priority_vaccine_scenarios[row['SCENARIO']].append([row['AGE_GROUP'], row['WORK_GROUP'], row['HEALTH_GROUP']])
 del priority_vaccine_df
 
-vaccine_effectiveness_df = pd.read_csv('input\\vaccine_effectiveness.csv', sep=';')
+vaccine_effectiveness_df = pd.read_csv(DIR_INPUT  + 'vaccine_effectiveness.csv', sep=';')
 vaccine_effectiveness_scenarios = dict()
 for index, row in vaccine_effectiveness_df.iterrows():
     vaccine_effectiveness_scenarios[row['SCENARIO']] = vaccine_effectiveness_scenarios.get(row['SCENARIO'], dict())
@@ -30,7 +31,7 @@ n_vaccine_days = 305
 
 c_daly_vector = {'Home': 0.2, 'Hospital': 0.3, 'ICU': 0.5, 'Death': 1, 'Recovered': 0.1}
 
-vaccine_information = pd.read_csv('input\\region_capacities.csv', sep=';', index_col=0).to_dict()
+vaccine_information = pd.read_csv(DIR_INPUT  + 'region_capacities.csv', sep=';', index_col=0).to_dict()
 
 # {'Beta': 0.00775140970516046, 'DC': 1.8647276815305034, 'Error': 0.4858492582075069}
 c_beta_base = [0.01, 0.01, 0.01, 0.01, 0.01, 0.01]  # 0.008140019590906994

@@ -1,10 +1,12 @@
-from model import Model
+from logic.model import Model
 from pyexcelerate import Workbook
 import numpy as np
 import pandas as pd
 import datetime
 import json
 import time
+
+from root import DIR_INPUT, DIR_OUTPUT
 
 
 class Calibration(object):
@@ -18,8 +20,8 @@ class Calibration(object):
             self.type_params[pv[0]] = 'BASE_VALUE'
         for pv in self.model.prob_params:
             self.type_params[pv[0]] = 'BASE_VALUE'
-        self.real_cases = pd.read_csv('input\\real_cases.csv', sep=';')
-        self.real_deaths = pd.read_csv('input\\death_cases.csv', sep=';')
+        self.real_cases = pd.read_csv(DIR_INPUT + 'real_cases.csv', sep=';')
+        self.real_deaths = pd.read_csv(DIR_INPUT + 'death_cases.csv', sep=';')
 
     def run_calibration(self, beta_range: list, death_range: list, arrival_range: list, dates: dict,
                         dimensions: int = 18, initial_cases: int = 30, total: bool = True, iteration: int = 1,
@@ -173,14 +175,14 @@ class Calibration(object):
             organized_result['error'] = current['error']
             organized_results.append(organized_result)
         results_pd = pd.DataFrame(organized_results)
-        with open('output\\calibration_nm_results_' + ('total' if total else 'new') + str(iteration) + '.json', 'w') \
-                as fp_a:
+        with open(DIR_OUTPUT + 'calibration_nm_results_' + ('total' if total else 'new') + str(iteration) + '.json',
+                  'w') as fp_a:
             json.dump(self.current_results, fp_a)
         values = [results_pd.columns] + list(results_pd.values)
         wb = Workbook()
         wb.new_sheet('All_values', data=values)
-        wb.save('output\\calibration_nm_results_' + ('total' if total else 'new') + str(iteration) + '.xlsx')
-        print('Excel ', 'output\\calibration_nm_results_2_' + ('total' if total else 'new') + '.xlsx', 'exported')
+        wb.save(DIR_OUTPUT + 'calibration_nm_results_' + ('total' if total else 'new') + str(iteration) + '.xlsx')
+        print('Excel ', DIR_OUTPUT + 'calibration_nm_results_2_' + ('total' if total else 'new') + '.xlsx', 'exported')
 
         end_processing_s = time.process_time()
         end_time = datetime.datetime.now()

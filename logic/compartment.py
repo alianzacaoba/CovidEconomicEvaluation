@@ -1,5 +1,6 @@
 from typing import Dict
 
+
 class Compartment(object):
 
     values: Dict[float, float]

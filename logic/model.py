@@ -1,12 +1,13 @@
 from typing import List, Any
 
-from compartment import Compartment
+from logic.compartment import Compartment
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import warnings
 import json
 from pyexcelerate import Workbook
+from root import DIR_INPUT, DIR_OUTPUT
 
 warnings.simplefilter('error')
 
@@ -38,15 +39,15 @@ class Model(object):
 
     def __init__(self):
         self.compartments = dict()
-        initial_pop = pd.read_csv('input\\initial_population.csv', sep=';')
+        initial_pop = pd.read_csv(DIR_INPUT + 'initial_population.csv', sep=';')
         self.departments = list(initial_pop.DEPARTMENT.unique())
         self.age_groups = list(initial_pop.AGE_GROUP.unique())
         self.work_groups = list(initial_pop.WORK_GROUP.unique())
         self.health_groups = list(initial_pop.HEALTH_GROUP.unique())
-        with open('input\\neighbors.json') as json_file:
+        with open(DIR_INPUT + 'neighbors.json') as json_file:
             self.neighbors = json.load(json_file)
         self.initial_population = dict()
-        self.regions = pd.read_csv('input\\department_regions.csv', sep=';', index_col=0).to_dict(orient='index')
+        self.regions = pd.read_csv(DIR_INPUT + 'department_regions.csv', sep=';', index_col=0).to_dict(orient='index')
         for gv in self.departments:
             self.regions[gv] = self.regions[gv]['REGION']
             for ev in self.age_groups:
@@ -57,10 +58,10 @@ class Model(object):
                                               & (initial_pop['WORK_GROUP'] == wv) &
                                               (initial_pop['HEALTH_GROUP'] == hv)].POPULATION.sum())
         self.contact_matrix = {'HOME': {}, 'WORK': {}, 'SCHOOL': {}, 'OTHER': {}}
-        con_matrix_home = pd.read_excel('input\\contact_matrix.xlsx', sheet_name='Home', engine="openpyxl")
-        con_matrix_other = pd.read_excel('input\\contact_matrix.xlsx', sheet_name='Other', engine="openpyxl")
-        con_matrix_work = pd.read_excel('input\\contact_matrix.xlsx', sheet_name='Work', engine="openpyxl")
-        con_matrix_school = pd.read_excel('input\\contact_matrix.xlsx', sheet_name='School', engine="openpyxl")
+        con_matrix_home = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Home', engine="openpyxl")
+        con_matrix_other = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Other', engine="openpyxl")
+        con_matrix_work = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Work', engine="openpyxl")
+        con_matrix_school = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='School', engine="openpyxl")
         for c in con_matrix_home.columns:
             self.contact_matrix['HOME'][c] = con_matrix_home[c].to_list()
             self.contact_matrix['OTHER'][c] = con_matrix_other[c].to_list()
@@ -70,18 +71,19 @@ class Model(object):
         del con_matrix_other
         del con_matrix_work
         del con_matrix_school
-        self.contact_matrix_coefficients = pd.read_csv('input\\contact_matrix_coefficients.csv',
+        self.contact_matrix_coefficients = pd.read_csv(DIR_INPUT + 'contact_matrix_coefficients.csv',
                                                        index_col=[1, 2], sep=';').to_dict(orient='index')
-        self.birth_rates = pd.read_csv('input\\birth_rate.csv', sep=';', index_col=0).to_dict()['BIRTH_RATE']
-        morbidity_frac = pd.read_csv('input/morbidity_fraction.csv', sep=';', index_col=0)
+        self.birth_rates = pd.read_csv(DIR_INPUT + 'birth_rate.csv', sep=';', index_col=0).to_dict()['BIRTH_RATE']
+        morbidity_frac = pd.read_csv(DIR_INPUT + 'morbidity_fraction.csv', sep=';', index_col=0)
         self.morbidity_frac = morbidity_frac.to_dict()['COMORBIDITY_RISK']
         del morbidity_frac
-        self.death_rates = pd.read_csv('input\\death_rate.csv', sep=';', index_col=[0, 1]).to_dict()['DEATH_RATE']
-        self.med_degrees = pd.read_csv('input\\medical_degrees.csv', sep=';', index_col=[0, 1]).to_dict(orient='index')
+        self.death_rates = pd.read_csv(DIR_INPUT + 'death_rate.csv', sep=';', index_col=[0, 1]).to_dict()['DEATH_RATE']
+        self.med_degrees = pd.read_csv(DIR_INPUT + 'medical_degrees.csv', sep=';',
+                                       index_col=[0, 1]).to_dict(orient='index')
 
-        self.arrival_rate = pd.read_csv('input\\arrival_rate.csv', sep=';', index_col=0).to_dict()
+        self.arrival_rate = pd.read_csv(DIR_INPUT + 'arrival_rate.csv', sep=';', index_col=0).to_dict()
 
-        time_params_load = pd.read_csv('input\\input_time.csv', sep=';')
+        time_params_load = pd.read_csv(DIR_INPUT + 'input_time.csv', sep=';')
         self.time_params = dict()
         for pv1 in time_params_load['PARAMETER'].unique():
             current_param = time_params_load[time_params_load['PARAMETER'] == pv1]
@@ -96,7 +98,7 @@ class Model(object):
             del current_param
 
         del time_params_load
-        prob_params_load = pd.read_csv('input\\input_probabilities.csv', sep=';')
+        prob_params_load = pd.read_csv(DIR_INPUT + 'input_probabilities.csv', sep=';')
         self.prob_params = dict()
         for pv1 in prob_params_load['PARAMETER'].unique():
             current_param = prob_params_load[prob_params_load['PARAMETER'] == pv1]
@@ -462,9 +464,11 @@ class Model(object):
                                 v_2.values[t+1] = cur_v_2 + sum(dv_2_dt)
                                 v_1.values[t + 1] = cur_v_1
 
-                                c_t_c.values[t + 1] = h_c.values[t + 1]*home_treatment_cost# [(ev,hv)]
-                                h_t_c.values[t + 1] = (h.values[t + 1]+r_h.values[t + 1])*hospital_treatment_cost# [(ev,hv)]
-                                i_t_c.values[t + 1] = (i.values[t + 1]+r_i.values[t + 1])*icu_treatment_cost# [(ev,hv)]
+                                c_t_c.values[t + 1] = h_c.values[t + 1]*home_treatment_cost  # [(ev,hv)]
+                                h_t_c.values[t + 1] = (h.values[t + 1]+r_h.values[t + 1])*hospital_treatment_cost
+                                # [(ev,hv)]
+                                i_t_c.values[t + 1] = (i.values[t + 1]+r_i.values[t + 1])*icu_treatment_cost
+                                # [(ev,hv)]
                                 t_c.values[t + 1] = v_c.values[t + 1] + c_t_c.values[t + 1] + h_t_c.values[t + 1] + \
                                                     i_t_c.values[t + 1]
                                 daly.values[t+1] = sum([(c.values[t+1] + r_c.values[t+1])*daly_vector['Home'],
@@ -724,11 +728,11 @@ class Model(object):
                 del pop_pandas_g
                 pop_dict[gv] = pop_dict_g
             print('Begin exportation')
-            with open('output\\result_' + name + '.json', 'w') as fp:
+            with open(DIR_OUTPUT + 'result_' + name + '.json', 'w') as fp:
                 json.dump(pop_dict, fp)
-            print('JSon ', 'output\\result_' + name + '.json', 'exported')
-            pop_pandas.to_csv('output\\result_' + name + '.csv', index=False)
-            print('CSV ', 'output\\result_' + name + '.csv', 'exported')
+            print('JSon ', DIR_OUTPUT + 'result_' + name + '.json', 'exported')
+            pop_pandas.to_csv(DIR_OUTPUT + 'result_' + name + '.csv', index=False)
+            print('CSV ', DIR_OUTPUT + 'result_' + name + '.csv', 'exported')
             print('Begin excel exportation')
             wb = Workbook()
             for gv in tqdm(departments):
@@ -736,12 +740,12 @@ class Model(object):
                 values = [pop_pandas_current.columns] + list(pop_pandas_current.values)
                 name_gv = gv if len(gv) < 31 else gv[:15]
                 wb.new_sheet(name_gv, data=values)
-            pob_pandas_current.drop(columns='Department', inplace=True)
+            pop_pandas.drop(columns='Department', inplace=True)
             pop_pandas_current = pop_pandas.groupby(['day', 'Health', 'Work', 'Age']).sum().reset_index(drop=False)
             values = [pop_pandas_current.columns] + list(pop_pandas_current.values)
             print('Excel exportation country results')
             wb.new_sheet('Country_results', data=values)
-            print('Saving excel results', 'output\\result_' + name + '.xlsx')
-            wb.save('output\\result_' + name + '.xlsx')
-            print('Excel ', 'output\\result_' + name + '.xlsx', 'exported')
+            print('Saving excel results', DIR_OUTPUT + 'result_' + name + '.xlsx')
+            wb.save(DIR_OUTPUT + 'result_' + name + '.xlsx')
+            print('Excel ', DIR_OUTPUT + 'result_' + name + '.xlsx', 'exported')
             return pop_pandas

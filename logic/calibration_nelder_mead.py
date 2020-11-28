@@ -20,6 +20,8 @@ class Calibration(object):
             self.type_params[pv[0]] = 'BASE_VALUE'
         for pv in self.model.prob_params:
             self.type_params[pv[0]] = 'BASE_VALUE'
+        self.type_params['daly'] = 'BASE_VALUE'
+        self.type_params['cost'] = 'BASE_VALUE'
         self.real_cases = pd.read_csv(DIR_INPUT + 'real_cases.csv', sep=';')
         self.real_deaths = pd.read_csv(DIR_INPUT + 'death_cases.csv', sep=';')
 
@@ -41,21 +43,20 @@ class Calibration(object):
         dc = list()
         arrival = list()
         for i in range(6):
-            x_beta.append(np.random.triangular(beta_range[1][i]*0.95, beta_range[1][i], beta_range[1][i]*1.05,
+            x_beta.append(np.random.triangular(beta_range[1][i]*0.9, beta_range[1][i], beta_range[1][i]*1.1,
                                                size=initial_cases))
-            x_d_c.append(np.random.triangular(death_range[1][i]*.95, death_range[1][i], death_range[1][i]*1.05,
+            x_d_c.append(np.random.triangular(death_range[1][i]*0.9, death_range[1][i], death_range[1][i]*1.1,
                                                size=initial_cases))
-            x_arrival.append(np.random.triangular(arrival_range[1][i]*.95, arrival_range[1][i],
-                                                  arrival_range[1][i]*1.05, size=initial_cases))
+            x_arrival.append(np.random.triangular(arrival_range[0][i]*0.9, arrival_range[1][i], arrival_range[1][i]*1.1,
+                                                  size=initial_cases))
             beta.append(beta_range[1][i])
             dc.append(death_range[1][i])
             arrival.append(arrival_range[1][i])
 
         print('Initial iteration', int(1))
         print('Parameters \n Beta:', beta, '\n DC:', dc, '\n Arrivals:', arrival)
-        sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration',
-                                     beta=beta, death_coefficient=dc, arrival_coefficient=arrival,
-                                     sim_length=236)
+        sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
+                                     death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
         if not total:
             sim_results_alt = sim_results.copy()
             for k in range(1, len(sim_results)):
@@ -93,8 +94,7 @@ class Calibration(object):
             print('Parameters \n Beta:', beta, '\n DC:', dc, '\n Arrivals:', arrival)
 
             sim_results = self.model.run(self.type_params, name='Calibration' + str(i), run_type='calibration',
-                                         beta=beta, death_coefficient=dc, arrival_coefficient=arrival,
-                                         sim_length=236)
+                                         beta=beta, death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
             if not total:
                 sim_results_alt = sim_results.copy()
                 for k in range(1, len(sim_results)):
@@ -327,8 +327,8 @@ class Calibration(object):
                     dc = shrink_point[0, :].tolist()
                     arrival = shrink_point[0, :].tolist()
                     sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration',
-                                                 beta=beta,
-                                                 death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
+                                                 beta=beta, death_coefficient=dc, arrival_coefficient=arrival,
+                                                 sim_length=236)
                     if not total:
                         sim_results_alt = sim_results.copy()
                         for k in range(1, len(sim_results)):
@@ -392,8 +392,8 @@ class Calibration(object):
                     dc = shrink_point[0, :].tolist()
                     arrival = shrink_point[0, :].tolist()
                     sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration',
-                                                 beta=beta,
-                                                 death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
+                                                 beta=beta, death_coefficient=dc, arrival_coefficient=arrival,
+                                                 sim_length=236)
                     if not total:
                         sim_results_alt = sim_results.copy()
                         for k in range(1, len(sim_results)):

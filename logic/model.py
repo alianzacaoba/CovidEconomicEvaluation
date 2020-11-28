@@ -15,7 +15,6 @@ warnings.simplefilter('error')
 def calculate_vaccine_assignments(department_population: dict, day: int, vaccine_priority: list,
                                   vaccine_capacity: float, candidates_indexes: list):
     remaining_vaccines = vaccine_capacity
-    print(remaining_vaccines)
     assignation = dict()
     for group in vaccine_priority:
         ev, wv, hv = group
@@ -58,10 +57,19 @@ class Model(object):
                                               & (initial_pop['WORK_GROUP'] == wv) &
                                               (initial_pop['HEALTH_GROUP'] == hv)].POPULATION.sum())
         self.contact_matrix = {'HOME': {}, 'WORK': {}, 'SCHOOL': {}, 'OTHER': {}}
+        self.daly_vector = {'Home': {'INF_VALUE': 0.002, 'BASE_VALUE': 0.006, 'MAX_VALUE': 0.012},
+                           'Hospital': {'INF_VALUE': 0.032, 'BASE_VALUE': 0.051, 'MAX_VALUE': 0.074},
+                           'ICU': {'INF_VALUE': 0.088, 'BASE_VALUE': 0.133, 'MAX_VALUE': 0.190},
+                           'Death': {'INF_VALUE': 0.088, 'BASE_VALUE': 0.133, 'MAX_VALUE': 0.190},
+                           'Recovered': {'INF_VALUE': 0.0, 'BASE_VALUE': 0.0, 'MAX_VALUE': 0.006}}
+        self.vaccine_cost = {'INF_VALUE': 1035.892076, 'BASE_VALUE': 9413.864213, 'MAX_VALUE': 32021.81881}
         con_matrix_home = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Home', engine="openpyxl")
         con_matrix_other = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Other', engine="openpyxl")
         con_matrix_work = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Work', engine="openpyxl")
         con_matrix_school = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='School', engine="openpyxl")
+        self.attention_costs = pd.read_csv(DIR_INPUT+'attention_costs.csv', sep=';',
+                                           index_col=[0, 1, 2]).to_dict(orient='index')
+
         for c in con_matrix_home.columns:
             self.contact_matrix['HOME'][c] = con_matrix_home[c].to_list()
             self.contact_matrix['OTHER'][c] = con_matrix_other[c].to_list()
@@ -119,8 +127,7 @@ class Model(object):
             arrival_coefficient: list = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0), vaccine_priority: list = None,
             vaccine_capacities: dict = None, vaccine_effectiveness: dict = None, vaccine_start_day: float = None,
             vaccine_end_day: float = None, sim_length: int = 236,
-            movement_coefficient: float = 0.01, vaccine_cost: float = 1.0, home_treatment_cost: float = 10.0,
-            hospital_treatment_cost: float = 100.0, icu_treatment_cost: float = 1000.0, daly_vector: dict = None):
+            movement_coefficient: float = 0.0001):
         # run_type:
         #   1) 'calibration': for calibration purposes, states f1,f2,v1,v2,e_f,a_f do not exist
         #   2) 'vaccination': model with vaccine states
@@ -131,8 +138,9 @@ class Model(object):
         age_groups = self.age_groups
         work_groups = self.work_groups
         health_groups = self.health_groups
-        if daly_vector is None:
-            daly_vector = {'Home': 0.2, 'Hospital': 0.3, 'ICU': 0.5, 'Death': 1, 'Recovered': 0.1}
+        daly_vector = dict()
+        for dv in self.daly_vector:
+            daly_vector[dv] = self.daly_vector[dv][type_params['daly']]
         t_e = self.time_params[('t_e', 'ALL')][type_params['t_e']]
         t_p = self.time_params[('t_p', 'ALL')][type_params['t_p']]
         t_sy = self.time_params[('t_sy', 'ALL')][type_params['t_sy']]
@@ -367,7 +375,7 @@ class Model(object):
                                                }
 
                                     day_v.values[t + 1] = sum(dd_v_dt)
-                                    v_c.values[t + 1] = day_v.values[t + 1]*vaccine_cost
+                                    v_c.values[t + 1] = day_v.values[t + 1]*self.vaccine_cost[type_params['cost']]
                                     cur_su += sum(dsu_dt)
                                     cur_f_1 += sum(df_1_dt)
                                     cur_f_2 += sum(df_2_dt)
@@ -464,10 +472,13 @@ class Model(object):
                                 v_2.values[t+1] = cur_v_2 + sum(dv_2_dt)
                                 v_1.values[t + 1] = cur_v_1
 
-                                c_t_c.values[t + 1] = h_c.values[t + 1]*home_treatment_cost  # [(ev,hv)]
-                                h_t_c.values[t + 1] = (h.values[t + 1]+r_h.values[t + 1])*hospital_treatment_cost
+                                c_t_c.values[t + 1] = h_c.values[t + 1] * \
+                                                      self.attention_costs[(ev, hv, 'C')][type_params['cost']]
+                                h_t_c.values[t + 1] = (h.values[t + 1]+r_h.values[t + 1]) * \
+                                                      self.attention_costs[(ev, hv, 'H')][type_params['cost']]
                                 # [(ev,hv)]
-                                i_t_c.values[t + 1] = (i.values[t + 1]+r_i.values[t + 1])*icu_treatment_cost
+                                i_t_c.values[t + 1] = (i.values[t + 1]+r_i.values[t + 1]) * \
+                                                      self.attention_costs[(ev, hv, 'I')][type_params['cost']]
                                 # [(ev,hv)]
                                 t_c.values[t + 1] = v_c.values[t + 1] + c_t_c.values[t + 1] + h_t_c.values[t + 1] + \
                                                     i_t_c.values[t + 1]
@@ -566,9 +577,12 @@ class Model(object):
                                 d.values[t + 1] = cur_d + float(sum(dd_dt))
                                 cases.values[t + 1] = cur_cases + float(sum(dcases_dt))
                                 h_c.values[t + 1] = cur_sy * p_h[(ev, hv)] / t_sy
-                                c_t_c.values[t + 1] = h_c.values[t + 1] * home_treatment_cost
-                                h_t_c.values[t + 1] = (h.values[t + 1] + r_h.values[t + 1]) * hospital_treatment_cost
-                                i_t_c.values[t + 1] = (i.values[t + 1] + r_i.values[t + 1]) * icu_treatment_cost
+                                c_t_c.values[t + 1] = h_c.values[t + 1] * \
+                                                      self.attention_costs[(ev, hv, 'C')][type_params['cost']]
+                                h_t_c.values[t + 1] = (h.values[t + 1] + r_h.values[t + 1]) * \
+                                                      self.attention_costs[(ev, hv, 'H')][type_params['cost']]
+                                i_t_c.values[t + 1] = (i.values[t + 1] + r_i.values[t + 1]) * \
+                                                      self.attention_costs[(ev, hv, 'I')][type_params['cost']]
                                 t_c.values[t + 1] = v_c.values[t + 1] + c_t_c.values[t + 1] + h_t_c.values[t + 1] + \
                                                     i_t_c.values[t + 1]
                                 daly.values[t + 1] = sum([(c.values[t + 1] + r_c.values[t + 1]) * daly_vector['Home'],

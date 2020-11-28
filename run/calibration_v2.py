@@ -5,6 +5,7 @@ import numpy as np
 import datetime
 import json
 import time
+from root import DIR_OUTPUT
 
 start_processing_s_t = time.process_time()
 start_time_t = datetime.datetime.now()
@@ -16,7 +17,7 @@ c_death_inf = np.ones(6)
 c_death_base = np.ones(6)*1.5  # 1.9830377761558986
 c_death_sup = np.ones(6)*2.2
 c_arrival_inf = np.ones(6)*1.0
-c_arrival_base = np.ones(6)*1.0
+c_arrival_base = np.ones(6)*5.0
 c_arrival_sup = np.ones(6)*10
 calibration_model = Calibration()
 c_beta_ant = 0.0
@@ -29,10 +30,10 @@ days_cases = {1: 23, 2: 20, 3: 18, 4: 30, 5: 22, 6: 55}
 # 1.4848669979831661, 1.5123208592164006], 'arrival': [4.91557222639614, 5.079920417373481, 5.127148868703013,
 # 5.214650388469965, 5.074283649728818, 4.9715447323387725], 'error_cases': 4.883773174533946, 'error_deaths':
 # 5.07497126257022, 'error': 9.958744437104166}
-n_cases = 10*(len(c_beta_base) + len(c_death_base) + len(c_arrival_base))+1
+n_cases = 30*(len(c_beta_base) + len(c_death_base) + len(c_arrival_base))+1
 c_total = True
 changed = True
-error_ant = 100000000000000
+error_ant = np.ones(5)*100000000000000
 while changed:
     n_iteration += 1
     print('Cycle number:', n_iteration)
@@ -42,9 +43,11 @@ while changed:
                                       dates={'days_cases': days_cases, 'days_deaths': days_deaths}, total=c_total,
                                       iteration=n_iteration+100, max_shrinks=5, max_no_improvement=50,
                                       min_value_to_iterate=1000)
-    c_arrival_base += 1
-    changed = (error_ant > calibration_model.ideal_values['error'])
-    error_ant = calibration_model.ideal_values['error']
+    for i in range(5):
+        if calibration_model.current_results[i]['error'] < error_ant[i]:
+            changed = True
+            error_ant[i] = calibration_model.current_results[i]['error']
+
 end_processing_s_t = time.process_time()
 end_time_t = datetime.datetime.now()
 print('Performance: {0}'.format(end_processing_s_t - start_processing_s_t))
@@ -55,11 +58,12 @@ ss = int(execution_time % 60)
 print('Total Execution Time: {0} minutes {1} seconds'.format(mm, ss))
 print('Total Execution Time: {0} milliseconds'.format(execution_time * 1000))
 print('Total cycles:', n_iteration)
-with open('output\\calibration_consolidated_results_2' + ('total' if c_total else 'new') + '.json', 'w') as fp:
+with open(DIR_OUTPUT + 'calibration_consolidated_results_2' + ('total' if c_total else 'new') + '.json', 'w') as fp:
     json.dump(calibration_model.results, fp)
 results_pd_c = pd.DataFrame(calibration_model.results)
 c_values = [results_pd_c.columns] + list(results_pd_c.values)
 c_wb = Workbook()
 c_wb.new_sheet('All_values', data=c_values)
-c_wb.save('output\\calibration_nm_results_' + ('total' if c_total else 'new') + '.xlsx')
-print('Excel ', 'output\\calibration_consolidated_results_2_' + ('total' if c_total else 'new') + '.xlsx', 'exported')
+c_wb.save(DIR_OUTPUT + 'calibration_nm_results_' + ('total' if c_total else 'new') + '.xlsx')
+print('Excel ', DIR_OUTPUT + 'calibration_consolidated_results_2_' + ('total' if c_total else 'new') + '.xlsx',
+      'exported')

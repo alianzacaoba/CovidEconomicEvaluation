@@ -11,10 +11,10 @@ start_processing_s_t = time.process_time()
 start_time_t = datetime.datetime.now()
 
 c_beta_inf = np.zeros(6)
-c_beta_base = np.ones(6)*0.1  # 0.008140019590906994
-c_beta_sup = np.ones(6)*0.9
+c_beta_base = np.ones(6)*0.015  # 0.008140019590906994
+c_beta_sup = np.ones(6)*0.1
 c_death_inf = np.ones(6)
-c_death_base = np.ones(6)*1.5  # 1.9830377761558986
+c_death_base = np.ones(6)*1  # 1.9830377761558986
 c_death_sup = np.ones(6)*2.2
 c_arrival_inf = np.ones(6)*1.0
 c_arrival_base = np.ones(6)*5.0
@@ -30,7 +30,7 @@ days_cases = {1: 23, 2: 20, 3: 18, 4: 30, 5: 22, 6: 55}
 # 1.4848669979831661, 1.5123208592164006], 'arrival': [4.91557222639614, 5.079920417373481, 5.127148868703013,
 # 5.214650388469965, 5.074283649728818, 4.9715447323387725], 'error_cases': 4.883773174533946, 'error_deaths':
 # 5.07497126257022, 'error': 9.958744437104166}
-n_cases = 30*(len(c_beta_base) + len(c_death_base) + len(c_arrival_base))+1
+n_cases = 10*(len(c_beta_base) + len(c_death_base) + len(c_arrival_base))+1
 c_total = True
 changed = True
 error_ant = np.ones(5)*100000000000000

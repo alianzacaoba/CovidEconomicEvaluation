@@ -43,8 +43,6 @@ class Model(object):
         self.age_groups = list(initial_pop.AGE_GROUP.unique())
         self.work_groups = list(initial_pop.WORK_GROUP.unique())
         self.health_groups = list(initial_pop.HEALTH_GROUP.unique())
-        with open(DIR_INPUT + 'neighbors.json') as json_file:
-            self.neighbors = json.load(json_file)
         self.initial_population = dict()
         self.regions = pd.read_csv(DIR_INPUT + 'department_regions.csv', sep=';', index_col=0).to_dict(orient='index')
         for gv in self.departments:
@@ -125,9 +123,8 @@ class Model(object):
     def run(self, type_params: dict, name: str = 'Iteration', run_type: str = 'vaccination',
             beta: list = (0.5, 0.5, 0.5, 0.5, 0.5, 0.5), death_coefficient: list = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
             arrival_coefficient: list = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0), vaccine_priority: list = None,
-            vaccine_capacities: dict = None, vaccine_effectiveness: dict = None, vaccine_start_day: float = None,
-            vaccine_end_day: float = None, sim_length: int = 236,
-            movement_coefficient: float = 0.0001):
+            vaccine_capacities: dict = None, vaccine_effectiveness: dict = None, vaccine_start_day: dict = None,
+            vaccine_end_day: dict = None, sim_length: int = 236):
         # run_type:
         #   1) 'calibration': for calibration purposes, states f1,f2,v1,v2,e_f,a_f do not exist
         #   2) 'vaccination': model with vaccine states
@@ -176,7 +173,7 @@ class Model(object):
         # 0) SU, 1) E, 2) A, 3) R_A, 4) P, 5) Sy, 6) C, 7) R_C, 8) H, 9) R_H, 10)I, 11) R_I 12) R, 13) D, 14)Cases,
         # 15) F1, 16) F2, 17) V1, 18) V2, 19) EF, 20) AF  15(NV)-21(V)) Home cases
         i_1_indexes = [2, 4, 5, 20] if run_type == 'vaccination' else [2, 4, 5]
-        i_2_indexes = [6, 7, 8, 9, 10, 11]
+        i_2_indexes = [6, 7, 10]
         candidates_indexes = [0, 1, 2, 3, 15, 17] if run_type == 'vaccination' else [0, 1, 2, 3]
         alive_compartments = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 19, 20] \
             if run_type == 'vaccination' else [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -258,7 +255,8 @@ class Model(object):
             dep_pob = dict()
             for gv in departments:
                 cur_region = self.regions[gv]-1
-                if run_type == 'vaccination' and vaccine_start_day <= t <= vaccine_end_day:
+                if run_type == 'vaccination' and vaccine_start_day[type_params['vaccine_day']] <= t <= \
+                        vaccine_end_day[type_params['vaccine_day']]:
                     vaccine_assignments = calculate_vaccine_assignments(department_population=population[gv],
                                                                         day=t, vaccine_priority=vaccine_priority,
                                                                         vaccine_capacity=float(vaccine_capacities[gv]),
@@ -476,10 +474,8 @@ class Model(object):
                                                       self.attention_costs[(ev, hv, 'C')][type_params['cost']]
                                 h_t_c.values[t + 1] = (h.values[t + 1]+r_h.values[t + 1]) * \
                                                       self.attention_costs[(ev, hv, 'H')][type_params['cost']]
-                                # [(ev,hv)]
                                 i_t_c.values[t + 1] = (i.values[t + 1]+r_i.values[t + 1]) * \
                                                       self.attention_costs[(ev, hv, 'I')][type_params['cost']]
-                                # [(ev,hv)]
                                 t_c.values[t + 1] = v_c.values[t + 1] + c_t_c.values[t + 1] + h_t_c.values[t + 1] + \
                                                     i_t_c.values[t + 1]
                                 daly.values[t+1] = sum([(c.values[t+1] + r_c.values[t+1])*daly_vector['Home'],
@@ -656,30 +652,6 @@ class Model(object):
                             previous_growing_o_h = growing_o_h
                             previous_growing_m_s = growing_m_s
                             previous_growing_m_h = growing_m_h
-            # Run mobility
-            if t > 150 and run_type != "calibration":
-                moving_pob = dict()
-                for gv in departments:
-                    for ev in age_groups:
-                        for wv in work_groups:
-                            for hv in health_groups:
-                                for state in alive_compartments:
-                                    if state not in i_2_indexes:
-                                        moving_pob[(gv, ev, wv, hv, state)] = \
-                                            population[gv][ev][wv][hv][state].values[t + 1]*movement_coefficient
-                for gv in departments:
-                    for ev in age_groups:
-                        for wv in work_groups:
-                            for hv in health_groups:
-                                for state in alive_compartments:
-                                    if state not in i_2_indexes:
-                                        population[gv][ev][wv][hv][state].values[t + 1] -= \
-                                            moving_pob[(gv, ev, wv, hv, state)]
-                                        population[gv][ev][wv][hv][state].values[t + 1] += sum(
-                                            moving_pob[(gv2, ev, wv, hv, state)] * dep_pob[gv] /
-                                            sum(dep_pob[nv] for nv in self.neighbors[gv2])
-                                            for gv2 in self.neighbors[gv])
-
         if run_type == 'calibration':
             results_array = np.zeros(shape=(sim_length + 1, 12))
             for gv in departments:

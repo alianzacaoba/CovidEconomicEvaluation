@@ -14,7 +14,7 @@ class Calibration(object):
         self.model = Model()
         self.ideal_values = None
         self.results = list()
-        self.current_results = list()
+        self.current_results = None
         self.type_params = dict()
         for pv in self.model.time_params:
             self.type_params[pv[0]] = 'BASE_VALUE'
@@ -24,6 +24,63 @@ class Calibration(object):
         self.type_params['cost'] = 'BASE_VALUE'
         self.real_cases = pd.read_csv(DIR_INPUT + 'real_cases.csv', sep=';')
         self.real_deaths = pd.read_csv(DIR_INPUT + 'death_cases.csv', sep=';')
+
+    def calculate_point(self, real_case: np.array, real_death: np.array, beta: list, dc: list, arrival: list,
+                        dates: dict, total: bool = True):
+        sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
+                                     death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
+        if not total:
+            sim_results_alt = sim_results.copy()
+            for k in range(1, len(sim_results)):
+                print(sim_results[k])
+                sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
+            del sim_results_alt
+        error_cases = list()
+        for reg in range(6):
+            error_cases.append(np.average(np.prod(real_case[dates['days_cases'][reg + 1]:, reg] /
+                                                  np.max(real_case[:, reg]),
+                                                  np.power(sim_results[dates['days_cases'][reg + 1]:, reg] /
+                                                           real_case[dates['days_cases'][reg + 1]:, reg] - 1, 2))))
+        error_deaths = list()
+        for reg in range(6):
+            error_deaths.append(np.average(np.prod(real_case[dates['days_deaths'][reg + 1]:, 6 + reg] /
+                                                   np.max(real_death[:, reg]),
+                                                   np.power(sim_results[dates['days_deaths'][reg + 1]:, 6 + reg] /
+                                                            real_death[dates['days_deaths'][reg + 1]:, reg] - 1, 2)))
+                                )
+        error = float(5 * sum(error_cases) + sum(error_deaths))
+        print(' Cases error:', error_cases, '\n Deaths error:', error_deaths, '\n Total error:', error)
+        v_new = {'beta': tuple(beta), 'dc': tuple(dc), 'arrival': tuple(arrival), 'error_cases': tuple(error_cases),
+                 'error_deaths': tuple(error_deaths), 'error': error}
+        return v_new
+
+    def try_new_best(self, new_point: dict, iteration: int, real_case: np.array, real_death: np.array, dates: dict,
+                     total: bool = True):
+        beta = list()
+        dc = list()
+        arrival = list()
+        changed = False
+        for reg in range(6):
+            if new_point['error_cases'][reg] < self.ideal_values['error_cases'][reg]:
+                beta.append(new_point['beta'][reg])
+                arrival.append(new_point['arrival'][reg])
+                dc.append(new_point['dc'][reg])
+                changed = True
+            else:
+                beta.append(self.ideal_values['beta'][reg])
+                arrival.append(self.ideal_values['arrival'][reg])
+                if new_point['error_deaths'][reg] < self.ideal_values['error_deaths'][reg]:
+                    dc.append((new_point['dc'][reg]+self.ideal_values['dc'][reg])/2)
+                    changed = True
+                else:
+                    dc.append(self.ideal_values['dc'][reg])
+        if changed:
+            print('Trying new point', iteration)
+            print('Parameters \n Beta:', beta, '\n DC:', dc, '\n Arrivals:', arrival)
+            return self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc, arrival=arrival,
+            dates=dates, total=total)
+
+        return None
 
     def run_calibration(self, beta_range: list, death_range: list, arrival_range: list, dates: dict,
                         dimensions: int = 18, initial_cases: int = 30, total: bool = True, iteration: int = 1,
@@ -47,7 +104,7 @@ class Calibration(object):
                                                size=initial_cases))
             x_d_c.append(np.random.triangular(death_range[1][i]*0.9, death_range[1][i], death_range[1][i]*1.1,
                                                size=initial_cases))
-            x_arrival.append(np.random.triangular(arrival_range[0][i]*0.9, arrival_range[1][i], arrival_range[1][i]*1.1,
+            x_arrival.append(np.random.triangular(arrival_range[0][i], arrival_range[1][i], arrival_range[2][i],
                                                   size=initial_cases))
             beta.append(beta_range[1][i])
             dc.append(death_range[1][i])
@@ -55,36 +112,43 @@ class Calibration(object):
 
         print('Initial iteration', int(1))
         print('Parameters \n Beta:', beta, '\n DC:', dc, '\n Arrivals:', arrival)
-        sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
-                                     death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
-        if not total:
-            sim_results_alt = sim_results.copy()
-            for k in range(1, len(sim_results)):
-                print(sim_results[k])
-                sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
-            del sim_results_alt
-        error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
-                                              real_case[dates['days_cases'][i+1]:, i]-1, 2)) for i in range(6)))
-        error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6+i] /
-                                              real_death[dates['days_deaths'][i+1]:, i] - 1, 2)) for i in range(6)))
-        error = float(error_cases + error_deaths)
-        print('Cases error:', error_cases, 'Deaths error:', error_deaths, 'Total error:', error)
-        v_new = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
-                 'error_deaths': error_deaths, 'error': error}
+        v_new = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc, arrival=arrival,
+            dates=dates, total=total)
         if v_new not in self.results:
             self.results.append(v_new)
         self.current_results = list()
         self.current_results.append(v_new)
         if self.ideal_values is None:
-            best_error = error
+            best_error = v_new['error']
             self.ideal_values = v_new
-        elif self.ideal_values['error'] > error:
-            best_error = error
+        elif self.ideal_values['error'] > v_new['error']:
+            best_error = v_new['error']
             self.ideal_values = v_new
+            new_try = self.try_new_best(new_point=v_new, iteration=2, real_case=real_case, real_death=real_death,
+                              dates=dates, total=total)
+            if new_try is not None:
+                if self.ideal_values['error'] > new_try['error']:
+                    best_error = new_try['error']
+                    self.ideal_values = new_try
+                if new_try not in self.results:
+                    self.results.append(new_try)
+                if new_try not in self.current_results:
+                    self.current_results.append(new_try)
         else:
             best_error = self.ideal_values['error']
+            new_try = self.try_new_best(new_point=v_new, iteration=1, real_case=real_case, real_death=real_death,
+                                        dates=dates, total=total)
+            if new_try is not None:
+                if self.ideal_values['error'] > new_try['error']:
+                    best_error = new_try['error']
+                    self.ideal_values = new_try
+                if new_try not in self.results:
+                    self.results.append(new_try)
+                if new_try not in self.current_results:
+                    self.current_results.append(new_try)
         print('Current best results:')
-        print(self.ideal_values)
+        for iv in self.ideal_values:
+            print(' ', iv, ":", self.ideal_values[iv])
         for i in range(initial_cases):
             print('Initial iteration', int(i + 2))
             beta = [x_beta[0][i], x_beta[1][i], x_beta[2][i], x_beta[3][i], x_beta[4][i], x_beta[5][i]]
@@ -93,40 +157,34 @@ class Calibration(object):
                        x_arrival[5][i]]
             print('Parameters \n Beta:', beta, '\n DC:', dc, '\n Arrivals:', arrival)
 
-            sim_results = self.model.run(self.type_params, name='Calibration' + str(i), run_type='calibration',
-                                         beta=beta, death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
-            if not total:
-                sim_results_alt = sim_results.copy()
-                for k in range(1, len(sim_results)):
-                    sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
-                del sim_results_alt
-            error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
-                                                        real_case[dates['days_cases'][i+1]:, i] - 1, 2)) for i in
-                                    range(6)))
-            error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
-                                                         real_death[dates['days_deaths'][i+1]:, i] - 1, 2)) for i in
-                                     range(6)))
-            error = float(error_cases + error_deaths)
-            print('Cases error:', error_cases, 'Deaths error:', error_deaths, 'Total error:', error)
-            v_new = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
-                     'error_deaths': error_deaths, 'error': error}
+            v_new = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc, arrival=arrival,
+            dates=dates, total=total)
             if v_new not in self.results:
                 self.results.append(v_new)
             if v_new not in self.current_results:
                 self.current_results.append(v_new)
-
-            if best_error > error:
-                best_error = error
+            if best_error > v_new['error']:
+                best_error = v_new['error']
                 self.ideal_values = v_new
-            else:
-                best_error = self.ideal_values['error']
+            new_try = self.try_new_best(new_point=v_new, iteration=int(i + 2), real_case=real_case,
+                                        real_death=real_death, dates=dates, total=total)
+            if new_try is not None:
+                if self.ideal_values['error'] > new_try['error']:
+                    best_error = new_try['error']
+                    self.ideal_values = new_try
+                if new_try not in self.results:
+                    self.results.append(new_try)
+                if new_try not in self.current_results:
+                    self.current_results.append(new_try)
             print('Current best results:')
-            print(self.ideal_values)
+            for iv in self.ideal_values:
+                print(' ', iv, ":", self.ideal_values[iv])
 
         best_results = pd.DataFrame(self.current_results)
+        best_results.drop_duplicates(ignore_index=True)
         best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(dimensions+1)
         best_results = best_results.to_dict(orient='index')
-
+        print(best_results)
         if self.ideal_values['error'] < min_value_to_iterate:
             i = initial_cases
             n_shrinks = 0
@@ -146,16 +204,30 @@ class Calibration(object):
                 for vi in best_results_n:
                     if best_results_n[vi] not in self.current_results:
                         self.current_results.append(best_results_n[vi])
-                equal = True
-                for vi in range(5):
-                    if best_results_n[vi] != best_results[vi]:
-                        equal = False
-                n_no_changes = n_no_changes + 1 if equal else 0
+
+                n_no_changes = n_no_changes + 1 if best_results_n[0] == best_results[0] else 0
                 best_results = best_results_n
                 self.ideal_values = best_results[0]
+                for v_test in range(1, len(best_results)):
+                    new_try = self.try_new_best(new_point=best_results[v_test], iteration=int(i + 1),
+                                                real_case=real_case, real_death=real_death, dates=dates, total=total)
+                    if new_try is not None:
+                        if self.ideal_values['error'] > new_try['error']:
+                            self.ideal_values = new_try
+                            n_no_changes = 0
+                        if new_try not in self.results:
+                            self.results.append(new_try)
+                        if new_try not in self.current_results:
+                            self.current_results.append(new_try)
+                            best_results = pd.DataFrame(self.current_results).drop_duplicates(ignore_index=True)
+                            best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(
+                                dimensions + 1)
+                            best_results = best_results.to_dict(orient='index')
+
                 print('Current best results:')
-                print(best_results)
-                print('No improvement in top 5 results in :', n_no_changes, 'iterations')
+                for iv in self.ideal_values:
+                    print(iv, ":", self.ideal_values[iv])
+                print('No improvement in best results in :', n_no_changes, 'iterations')
         else:
             print('Insufficient error value to iterate over NMS: ', self.ideal_values['error'])
         print('Optimum found:')
@@ -174,7 +246,7 @@ class Calibration(object):
             organized_result['error_deaths'] = current['error_deaths']
             organized_result['error'] = current['error']
             organized_results.append(organized_result)
-        results_pd = pd.DataFrame(organized_results)
+        results_pd = pd.DataFrame(organized_results).drop_duplicates(ignore_index=True)
         with open(DIR_OUTPUT + 'calibration_nm_results_' + ('total' if total else 'new') + str(iteration) + '.json',
                   'w') as fp_a:
             json.dump(self.current_results, fp_a)
@@ -220,23 +292,8 @@ class Calibration(object):
         beta = reflection_point[0, :].tolist()
         dc = reflection_point[0, :].tolist()
         arrival = reflection_point[0, :].tolist()
-        sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
-                                     death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
-        if not total:
-            sim_results_alt = sim_results.copy()
-            for k in range(1, len(sim_results)):
-                print(sim_results[k])
-                sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
-            del sim_results_alt
-        error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
-                                                    real_case[dates['days_cases'][i+1]:, i] - 1, 2)) for i in range(6)))
-        error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
-                                                     real_death[dates['days_deaths'][i+1]:, i] - 1, 2)) for i in
-                                 range(6)))
-        error = float(error_cases + error_deaths)
-        v_reflection = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
-                 'error_deaths': error_deaths, 'error': error}
-
+        v_reflection = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
+                                            arrival=arrival, dates=dates, total=total)
         if v_reflection not in self.results:
             self.results.append(v_reflection)
         if v_reflection['error'] < best_values[0]['error']:
@@ -250,32 +307,16 @@ class Calibration(object):
             beta = expansion_point[0, :].tolist()
             dc = expansion_point[0, :].tolist()
             arrival = expansion_point[0, :].tolist()
-            sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
-                                         death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
-            if not total:
-                sim_results_alt = sim_results.copy()
-                for k in range(1, len(sim_results)):
-                    print(sim_results[k])
-                    sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
-                del sim_results_alt
-            error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
-                                                        real_case[dates['days_cases'][i+1]:, i] - 1, 2)) for i in
-                                    range(6)))
-            error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
-                                                         real_death[dates['days_deaths'][i+1]:, i] - 1, 2)) for i in
-                                     range(6)))
-            error = float(error_cases + error_deaths)
-            v_expansion = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
-                            'error_deaths': error_deaths, 'error': error}
+            v_expansion = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
+                                               arrival=arrival, dates=dates, total=total)
             if v_expansion not in self.results:
                 self.results.append(v_expansion)
-            if v_expansion['error'] < v_reflection['error']:
-                exists = False
-                for vi in best_values:
-                    if v_expansion == best_values[vi]:
-                        exists = True
-                if not exists:
-                    best_values[len(best_values)] = v_expansion
+            exists = False
+            for vi in best_values:
+                if v_expansion == best_values[vi]:
+                    exists = True
+            if not exists:
+                best_values[len(best_values)] = v_expansion
         elif v_reflection['error'] < best_values[1]['error']:
             exists = False
             for vi in best_values:
@@ -285,28 +326,18 @@ class Calibration(object):
                 best_values[len(best_values)] = v_reflection
         elif v_reflection['error'] < worst_point['error']:
             # Outside contraction
+            exists = False
+            for vi in best_values:
+                if v_reflection == best_values[vi]:
+                    exists = True
+            if not exists:
+                best_values[len(best_values)] = v_reflection
             outside_contraction_point = np.maximum(np_centroid + beta_p*(np_centroid-np_worst_point), 0.0)
             beta = outside_contraction_point[0, :].tolist()
             dc = outside_contraction_point[0, :].tolist()
             arrival = outside_contraction_point[0, :].tolist()
-            sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
-                                         death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
-            if not total:
-                sim_results_alt = sim_results.copy()
-                for k in range(1, len(sim_results)):
-                    print(sim_results[k])
-                    sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
-                del sim_results_alt
-            error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
-                                                        real_case[dates['days_cases'][i+1]:, i] - 1, 2)) for i in
-                                    range(6)))
-            error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
-                                                         real_death[dates['days_deaths'][i+1]:, i] - 1, 2)) for i in
-                                     range(6)))
-            error = float(error_cases + error_deaths)
-            v_outside_contraction = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
-                           'error_deaths': error_deaths, 'error': error}
-
+            v_outside_contraction = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
+                                                         arrival=arrival, dates=dates, total=total)
             if v_outside_contraction not in self.results:
                 self.results.append(v_outside_contraction)
             if v_outside_contraction['error'] < v_reflection['error']:
@@ -326,51 +357,19 @@ class Calibration(object):
                     beta = shrink_point[0, :].tolist()
                     dc = shrink_point[0, :].tolist()
                     arrival = shrink_point[0, :].tolist()
-                    sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration',
-                                                 beta=beta, death_coefficient=dc, arrival_coefficient=arrival,
-                                                 sim_length=236)
-                    if not total:
-                        sim_results_alt = sim_results.copy()
-                        for k in range(1, len(sim_results)):
-                            print(sim_results[k])
-                            sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
-                        del sim_results_alt
-                    error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
-                                                                real_case[dates['days_cases'][i+1]:, i] - 1, 2))
-                                            for i in range(6)))
-                    error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
-                                                                 real_death[dates['days_deaths'][i+1]:, i] - 1, 2))
-                                             for i in range(6)))
-                    error = float(error_cases + error_deaths)
-                    v_shrink = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
-                                             'error_deaths': error_deaths, 'error': error}
+                    v_shrink = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
+                                                    arrival=arrival, dates=dates, total=total)
                     if v_shrink not in self.results:
                         self.results.append(v_shrink)
-                    best_values[i + 1] = v_shrink
+                    best_values[len(best_values)] = v_shrink
         else:
             # Inside contraction point
             inside_contraction_point = np.maximum(np_centroid + beta_p * (np_centroid - np_worst_point), 0.0)
             beta = inside_contraction_point[0, :].tolist()
             dc = inside_contraction_point[0, :].tolist()
             arrival = inside_contraction_point[0, :].tolist()
-            sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
-                                         death_coefficient=dc, arrival_coefficient=arrival, sim_length=236)
-            if not total:
-                sim_results_alt = sim_results.copy()
-                for k in range(1, len(sim_results)):
-                    print(sim_results[k])
-                    sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
-                del sim_results_alt
-            error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
-                                                        real_case[dates['days_cases'][i+1]:, i] - 1, 2)) for i in
-                                    range(6)))
-            error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
-                                                         real_death[dates['days_deaths'][i+1]:, i] - 1, 2)) for i in
-                                     range(6)))
-            error = float(error_cases + error_deaths)
-            v_inside_contraction = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
-                                     'error_deaths': error_deaths, 'error': error}
-
+            v_inside_contraction = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
+                                               arrival=arrival, dates=dates, total=total)
             if v_inside_contraction not in self.results:
                 self.results.append(v_inside_contraction)
             if v_inside_contraction['error'] < worst_point['error']:
@@ -391,28 +390,12 @@ class Calibration(object):
                     beta = shrink_point[0, :].tolist()
                     dc = shrink_point[0, :].tolist()
                     arrival = shrink_point[0, :].tolist()
-                    sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration',
-                                                 beta=beta, death_coefficient=dc, arrival_coefficient=arrival,
-                                                 sim_length=236)
-                    if not total:
-                        sim_results_alt = sim_results.copy()
-                        for k in range(1, len(sim_results)):
-                            print(sim_results[k])
-                            sim_results[k] = sim_results_alt[k] - sim_results_alt[k - 1]
-                        del sim_results_alt
-                    error_cases = float(sum(np.average(np.power(sim_results[dates['days_cases'][i+1]:, i] /
-                                                                real_case[dates['days_cases'][i+1]:, i] - 1, 2))
-                                            for i in range(6)))
-                    error_deaths = float(sum(np.average(np.power(sim_results[dates['days_deaths'][i+1]:, 6 + i] /
-                                                                 real_death[dates['days_deaths'][i+1]:, i] - 1, 2))
-                                             for i in range(6)))
-                    error = float(error_cases + error_deaths)
-                    v_shrink = {'beta': beta, 'dc': dc, 'arrival': arrival, 'error_cases': error_cases,
-                                'error_deaths': error_deaths, 'error': error}
+                    v_shrink = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
+                                                    arrival=arrival, dates=dates, total=total)
                     if v_shrink not in self.results:
                         self.results.append(v_shrink)
-                    best_values[i + 1] = v_shrink
-        best_values = pd.DataFrame(best_values).T
+                    best_values[len(best_values)] = v_shrink
+        best_values = pd.DataFrame(best_values).T.drop_duplicates(ignore_index=True)
         best_values = best_values.sort_values(by='error', ascending=True, ignore_index=True).head(n_relevant + 1)
         best_values = best_values.to_dict(orient='index')
         return {'values': best_values, 'shrink': shrink}

@@ -37,17 +37,16 @@ class Calibration(object):
             del sim_results_alt
         error_cases = list()
         for reg in range(6):
-            error_cases.append(np.average(np.prod(real_case[dates['days_cases'][reg + 1]:, reg] /
-                                                  np.max(real_case[:, reg]),
-                                                  np.power(sim_results[dates['days_cases'][reg + 1]:, reg] /
-                                                           real_case[dates['days_cases'][reg + 1]:, reg] - 1, 2))))
+            weight = real_case[dates['days_cases'][reg + 1]:, reg] /np.max(real_case[:, reg])
+            current_error = np.power(sim_results[dates['days_cases'][reg + 1]:, reg] /
+                                     real_case[dates['days_cases'][reg + 1]:, reg] - 1, 2)
+            error_cases.append(np.average(np.multiply(weight, current_error)))
         error_deaths = list()
         for reg in range(6):
-            error_deaths.append(np.average(np.prod(real_case[dates['days_deaths'][reg + 1]:, 6 + reg] /
-                                                   np.max(real_death[:, reg]),
-                                                   np.power(sim_results[dates['days_deaths'][reg + 1]:, 6 + reg] /
-                                                            real_death[dates['days_deaths'][reg + 1]:, reg] - 1, 2)))
-                                )
+            weight = real_death[dates['days_deaths'][reg + 1]:, reg] / np.max(real_death[:, reg])
+            current_error = np.power(sim_results[dates['days_deaths'][reg + 1]:, 6 + reg] /
+                                     real_death[dates['days_deaths'][reg + 1]:, reg] - 1, 2)
+            error_deaths.append(np.average(np.multiply(weight, current_error)))
         error = float(5 * sum(error_cases) + sum(error_deaths))
         print(' Cases error:', error_cases, '\n Deaths error:', error_deaths, '\n Total error:', error)
         v_new = {'beta': tuple(beta), 'dc': tuple(dc), 'arrival': tuple(arrival), 'error_cases': tuple(error_cases),

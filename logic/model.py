@@ -77,8 +77,11 @@ class Model(object):
         del con_matrix_other
         del con_matrix_work
         del con_matrix_school
-        self.contact_matrix_coefficients = pd.read_csv(DIR_INPUT + 'contact_matrix_coefficients.csv',
-                                                       index_col=[1, 2], sep=';').to_dict(orient='index')
+        self.contact_matrix_coefficients = pd.read_csv(DIR_INPUT + 'contact_matrix_coefficients.csv', sep=';')
+        self.max_cm_days = int(self.contact_matrix_coefficients.SIM_DAY.max())
+        self.contact_matrix_coefficients.set_index(['SIM_DAY', 'REGIONS'], inplace=True)
+        self.contact_matrix_coefficients = self.contact_matrix_coefficients.to_dict(orient='index')
+
         self.birth_rates = pd.read_csv(DIR_INPUT + 'birth_rate.csv', sep=';', index_col=0).to_dict()['BIRTH_RATE']
         morbidity_frac = pd.read_csv(DIR_INPUT + 'morbidity_fraction.csv', sep=';', index_col=0)
         self.morbidity_frac = morbidity_frac.to_dict()['COMORBIDITY_RISK']
@@ -123,12 +126,14 @@ class Model(object):
             beta: tuple = (0.5, 0.5, 0.5, 0.5, 0.5, 0.5), death_coefficient: tuple = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
             arrival_coefficient: tuple = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0), vaccine_priority: list = None,
             vaccine_capacities: dict = None, vaccine_effectiveness: dict = None, vaccine_start_day: dict = None,
-            vaccine_end_day: dict = None, sim_length: int = 265):
+            vaccine_end_day: dict = None, sim_length: int = 265, export_type: str = 'all'):
         # run_type:
         #   1) 'calibration': for calibration purposes, states f1,f2,v1,v2,e_f,a_f do not exist
         #   2) 'vaccination': model with vaccine states
         #   3) 'non-vaccination': model
         # SU, E, A, R_A, P, Sy, C, H, I, R, D, Cases
+
+        # export_type = {'all', 'json', 'csv', 'xlsx}
         population = dict()
         departments = self.departments
         age_groups = self.age_groups
@@ -303,8 +308,8 @@ class Model(object):
                     contacts = np.zeros(len(age_groups))
 
                     for cv in self.contact_matrix:
-                        contacts += (1+self.contact_matrix_coefficients[(min(t, 273), cur_region+1)][cv]) * \
-                                    np.array(self.contact_matrix[cv][ev])
+                        contacts += (1+self.contact_matrix_coefficients[(min(t, self.max_cm_days), cur_region+1)][cv]) \
+                                    * np.array(self.contact_matrix[cv][ev])
                     for wv in work_groups:
                         for hv in health_groups:
                             if run_type == 'vaccination':
@@ -384,12 +389,11 @@ class Model(object):
                                     cur_v_2 += sum(dv_2_dt)
 
                                 percent = np.array(i_1) + np.array(i_2) if wv == 'M' else np.array(i_1)
-                                contagion_sus = cur_su * beta[cur_region] * (
-                                            1 - float(np.prod(np.power(1 - percent, contacts))))
-                                contagion_f_1 = cur_f_1 * beta[cur_region] * (
-                                            1 - float(np.prod(np.power(1 - percent, contacts))))
-                                contagion_f_2 = cur_f_2 * beta[cur_region] * (
-                                            1 - float(np.prod(np.power(1 - percent, contacts))))
+                                percent_change = min(beta[cur_region] * np.dot(1 - percent, contacts),1.0)
+                                #(1 - float(np.prod(np.power(1 - percent, contacts))))
+                                contagion_sus = cur_su * percent_change
+                                contagion_f_1 = cur_f_1 * percent_change
+                                contagion_f_2 = cur_f_2 * percent_change
                                 dsu_dt = {-contagion_sus}
                                 df_1_dt = {-contagion_f_1}
                                 df_2_dt = {-contagion_f_2}
@@ -506,8 +510,9 @@ class Model(object):
 
                                 # Run infection
                                 percent = np.array(i_1) + np.array(i_2) if wv == 'M' else np.array(i_1)
-                                contagion_sus = cur_su * beta[cur_region] * \
-                                                (1 - float(np.prod(np.power(1-percent, contacts))))
+                                percent_change = min(beta[cur_region] * np.dot(1 - percent, contacts),1.0)
+                                #(1 - float(np.prod(np.power(1 - percent, contacts))))
+                                contagion_sus = cur_su * percent_change
                                 dsu_dt = {-contagion_sus
                                           }
                                 de_dt = {contagion_sus,
@@ -713,27 +718,35 @@ class Model(object):
                 del pop_pandas_g
                 pop_dict[gv] = pop_dict_g
             print('Begin exportation')
-            with open(DIR_OUTPUT + 'result_' + name + '.json', 'w') as fp:
-                json.dump(pop_dict, fp)
-            print('JSon ', DIR_OUTPUT + 'result_' + name + '.json', 'exported')
-            pop_pandas = pop_pandas.set_index(['day', 'Department', 'Health', 'Work', 'Age']).reset_index(drop=False)
-            pop_pandas.to_csv(DIR_OUTPUT + 'result_' + name + '.csv', index=False)
-            print('CSV ', DIR_OUTPUT + 'result_' + name + '.csv', 'exported')
-            print('Begin excel exportation')
-            wb = Workbook()
-            for gv in tqdm(departments):
-                pop_pandas_current = pop_pandas[pop_pandas['Department'] == gv].drop(columns='Department')
-                pop_pandas_current = pop_pandas_current.set_index(['day', 'Health', 'Work', 'Age']).reset_index(
+            if export_type == 'all' or export_type == 'json':
+                print('Begin JSon exportation')
+                with open(DIR_OUTPUT + 'result_' + name + '.json', 'w') as fp:
+                    json.dump(pop_dict, fp)
+                print('JSon ', DIR_OUTPUT + 'result_' + name + '.json', 'exported')
+            if export_type == 'all' or export_type == 'csv' or export_type == 'xlsx':
+                pop_pandas = pop_pandas.set_index(['day', 'Department', 'Health', 'Work', 'Age']).reset_index(
                     drop=False)
-                values = [pop_pandas_current.columns] + list(pop_pandas_current.values)
-                name_gv = gv if len(gv) < 31 else gv[:15]
-                wb.new_sheet(name_gv, data=values)
-            pop_pandas.drop(columns='Department', inplace=True)
-            pop_pandas_current = pop_pandas.groupby(['day', 'Health', 'Work', 'Age']).sum().reset_index(drop=False)
-            values = [pop_pandas_current.columns] + list(pop_pandas_current.values)
-            print('Excel exportation country results')
-            wb.new_sheet('Country_results', data=values)
-            print('Saving excel results', DIR_OUTPUT + 'result_' + name + '.xlsx')
-            wb.save(DIR_OUTPUT + 'result_' + name + '.xlsx')
-            print('Excel ', DIR_OUTPUT + 'result_' + name + '.xlsx', 'exported')
+                if export_type == 'all' or export_type == 'csv':
+                    print('Begin CSV exportation')
+                    pop_pandas.to_csv(DIR_OUTPUT + 'result_' + name + '.csv', index=False)
+                    print('CSV ', DIR_OUTPUT + 'result_' + name + '.csv', 'exported')
+                if export_type == 'all' or export_type == 'xlsx':
+                    print('Begin excel exportation')
+                    wb = Workbook()
+                    for gv in tqdm(departments):
+                        pop_pandas_current = pop_pandas[pop_pandas['Department'] == gv].drop(columns='Department')
+                        pop_pandas_current = pop_pandas_current.set_index(['day', 'Health', 'Work', 'Age']).reset_index(
+                            drop=False)
+                        values = [pop_pandas_current.columns] + list(pop_pandas_current.values)
+                        name_gv = gv if len(gv) < 31 else gv[:15]
+                        wb.new_sheet(name_gv, data=values)
+                    pop_pandas.drop(columns='Department', inplace=True)
+                    pop_pandas_current = pop_pandas.groupby(['day', 'Health', 'Work', 'Age']).sum().reset_index(
+                        drop=False)
+                    values = [pop_pandas_current.columns] + list(pop_pandas_current.values)
+                    print('Excel exportation country results')
+                    wb.new_sheet('Country_results', data=values)
+                    print('Saving excel results', DIR_OUTPUT + 'result_' + name + '.xlsx')
+                    wb.save(DIR_OUTPUT + 'result_' + name + '.xlsx')
+                    print('Excel ', DIR_OUTPUT + 'result_' + name + '.xlsx', 'exported')
             return pop_pandas

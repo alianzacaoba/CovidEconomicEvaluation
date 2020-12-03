@@ -56,7 +56,19 @@ c_arrival_base = (28.008438791881524, 13.937260565381386, 28.019878666248914, 22
 c_name = 'no_vac'
 model_ex.run(type_params=type_paramsA, name=c_name, run_type='no_vaccination', beta=c_beta_base,
              arrival_coefficient=c_arrival_base, death_coefficient=c_death_base,
-             sim_length=365*3)
+             sim_length=365*3, export_type='all')
+c_name = 'no_vac_json'
+model_ex.run(type_params=type_paramsA, name=c_name, run_type='no_vaccination', beta=c_beta_base,
+             arrival_coefficient=c_arrival_base, death_coefficient=c_death_base,
+             sim_length=365*3, export_type='json')
+c_name = 'no_vac_csv'
+model_ex.run(type_params=type_paramsA, name=c_name, run_type='no_vaccination', beta=c_beta_base,
+             arrival_coefficient=c_arrival_base, death_coefficient=c_death_base,
+             sim_length=365*3, export_type='csv')
+c_name = 'no_vac_xlsx'
+model_ex.run(type_params=type_paramsA, name=c_name, run_type='no_vaccination', beta=c_beta_base,
+             arrival_coefficient=c_arrival_base, death_coefficient=c_death_base,
+             sim_length=365*3, export_type='xlsx')
 
 for pvs in priority_vaccine_scenarios:
     for pes in vaccine_effectiveness_scenarios:

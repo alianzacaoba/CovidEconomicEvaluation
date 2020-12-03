@@ -10,17 +10,14 @@ from root import DIR_OUTPUT
 start_processing_s_t = time.process_time()
 start_time_t = datetime.datetime.now()
 
-c_beta_base = np.array((0.016365807406708593, 0.015195432338911278, 0.014413577299103739, 0.015032450873958988,
-               0.014314009181017572, 0.013347855520539915))
-c_beta_inf = c_beta_base*0.9
-c_beta_sup = c_beta_base*1.1
-c_death_base = np.array((1.2292383181904216, 0.6713077384948367, 1.11718006011982, 1.1587520607570703,
-                         0.983949846176943, 1.2289271808837245))
-c_death_inf = c_death_base*.9
-c_death_sup = c_death_base*1.1
+c_beta_inf = np.ones(6)*0.00000001
+c_beta_base = np.ones(6)*0.02
+c_beta_sup = np.ones(6)
+c_death_inf = np.zeros(6)
+c_death_base = np.ones(6)
+c_death_sup = np.ones(6)*2.2
 c_arrival_inf = np.ones(6)*1.0
-c_arrival_base = np.array((28.008438791881524, 13.937260565381386, 28.019878666248914, 22.635142336479415,
-                           27.653506361712104, 28.004883621948935))
+c_arrival_base = np.ones(6)*20
 c_arrival_sup = np.ones(6)*30
 calibration_model = Calibration()
 c_beta_ant = 0.0
@@ -39,7 +36,7 @@ while n_changed < 2:
                                       death_range=[c_death_inf, c_death_base, c_death_sup],
                                       arrival_range=[c_arrival_inf, c_arrival_base, c_arrival_sup],
                                       dates={'days_cases': days_cases, 'days_deaths': days_deaths}, total=c_total,
-                                      iteration=1000+n_iteration, max_shrinks=5, max_no_improvement=50,
+                                      iteration=n_iteration, max_shrinks=5, max_no_improvement=50,
                                       min_value_to_iterate=1000)
     if calibration_model.current_results[0]['error'] < previous_error:
         n_changed = 0
@@ -47,12 +44,12 @@ while n_changed < 2:
         c_beta_base = np.array(calibration_model.ideal_values['beta'])
         c_death_base = np.array(calibration_model.ideal_values['dc'])
         c_arrival_base = np.array(calibration_model.ideal_values['arrival'])
-        c_beta_inf = np.minimum(np.average([c_beta_base, c_beta_inf], axis=0), c_beta_base * 0.9)
-        c_beta_sup = np.maximum(np.average([c_beta_base, c_beta_sup], axis=0), c_beta_base * 1.1)
-        c_death_inf = np.minimum(np.average([c_death_base, c_death_inf], axis=0), c_death_base * 0.9)
-        c_death_sup = np.maximum(np.average([c_death_base, c_death_sup], axis=0), c_death_sup * 1.1)
-        c_arrival_inf = np.minimum(np.average([c_arrival_base, c_arrival_inf], axis=0), c_arrival_base * 0.9)
-        c_arrival_sup = np.maximum(np.average([c_arrival_base, c_arrival_sup], axis=0), c_arrival_base * 1.1)
+        c_beta_inf = np.minimum(np.average([c_beta_base, c_beta_inf], axis=0), c_beta_base*0.9)
+        c_beta_sup = np.maximum(np.average([c_beta_base, c_beta_sup], axis=0), c_beta_base*1.1)
+        c_death_inf = np.minimum(np.average([c_death_base, c_death_inf], axis=0), c_death_base*0.9)
+        c_death_sup = np.maximum(np.average([c_death_base, c_death_sup], axis=0), c_death_sup*1.1)
+        c_arrival_inf = np.minimum(np.average([c_arrival_base, c_arrival_inf], axis=0), c_arrival_base*0.9)
+        c_arrival_sup = np.maximum(np.average([c_arrival_base, c_arrival_sup], axis=0), c_arrival_base*1.1)
     else:
         n_changed += 1
 

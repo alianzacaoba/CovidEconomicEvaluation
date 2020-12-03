@@ -54,13 +54,13 @@ class Model(object):
                             float(initial_pop[(initial_pop['DEPARTMENT'] == gv) & (initial_pop['AGE_GROUP'] == ev)
                                               & (initial_pop['WORK_GROUP'] == wv) &
                                               (initial_pop['HEALTH_GROUP'] == hv)].POPULATION.sum())
-        self.contact_matrix = {'HOME': {}, 'WORK': {}, 'SCHOOL': {}, 'OTHER': {}}
         self.daly_vector = {'Home': {'INF_VALUE': 0.002, 'BASE_VALUE': 0.006, 'MAX_VALUE': 0.012},
                            'Hospital': {'INF_VALUE': 0.032, 'BASE_VALUE': 0.051, 'MAX_VALUE': 0.074},
                            'ICU': {'INF_VALUE': 0.088, 'BASE_VALUE': 0.133, 'MAX_VALUE': 0.190},
                            'Death': {'INF_VALUE': 0.088, 'BASE_VALUE': 0.133, 'MAX_VALUE': 0.190},
                            'Recovered': {'INF_VALUE': 0.0, 'BASE_VALUE': 0.0, 'MAX_VALUE': 0.006}}
         self.vaccine_cost = {'INF_VALUE': 1035.892076, 'BASE_VALUE': 9413.864213, 'MAX_VALUE': 32021.81881}
+        self.contact_matrix = {'HOME': {}, 'WORK': {}, 'SCHOOL': {}, 'OTHER': {}}
         con_matrix_home = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Home', engine="openpyxl")
         con_matrix_other = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Other', engine="openpyxl")
         con_matrix_work = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Work', engine="openpyxl")
@@ -86,7 +86,6 @@ class Model(object):
         self.death_rates = pd.read_csv(DIR_INPUT + 'death_rate.csv', sep=';', index_col=[0, 1]).to_dict()['DEATH_RATE']
         self.med_degrees = pd.read_csv(DIR_INPUT + 'medical_degrees.csv', sep=';',
                                        index_col=[0, 1]).to_dict(orient='index')
-
         self.arrival_rate = pd.read_csv(DIR_INPUT + 'arrival_rate.csv', sep=';', index_col=0).to_dict()
 
         time_params_load = pd.read_csv(DIR_INPUT + 'input_time.csv', sep=';')
@@ -121,10 +120,10 @@ class Model(object):
             del current_param
 
     def run(self, type_params: dict, name: str = 'Iteration', run_type: str = 'vaccination',
-            beta: list = (0.5, 0.5, 0.5, 0.5, 0.5, 0.5), death_coefficient: list = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
-            arrival_coefficient: list = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0), vaccine_priority: list = None,
+            beta: tuple = (0.5, 0.5, 0.5, 0.5, 0.5, 0.5), death_coefficient: tuple = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
+            arrival_coefficient: tuple = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0), vaccine_priority: list = None,
             vaccine_capacities: dict = None, vaccine_effectiveness: dict = None, vaccine_start_day: dict = None,
-            vaccine_end_day: dict = None, sim_length: int = 236):
+            vaccine_end_day: dict = None, sim_length: int = 265):
         # run_type:
         #   1) 'calibration': for calibration purposes, states f1,f2,v1,v2,e_f,a_f do not exist
         #   2) 'vaccination': model with vaccine states
@@ -717,12 +716,15 @@ class Model(object):
             with open(DIR_OUTPUT + 'result_' + name + '.json', 'w') as fp:
                 json.dump(pop_dict, fp)
             print('JSon ', DIR_OUTPUT + 'result_' + name + '.json', 'exported')
+            pop_pandas = pop_pandas.set_index(['day', 'Department', 'Health', 'Work', 'Age']).reset_index(drop=False)
             pop_pandas.to_csv(DIR_OUTPUT + 'result_' + name + '.csv', index=False)
             print('CSV ', DIR_OUTPUT + 'result_' + name + '.csv', 'exported')
             print('Begin excel exportation')
             wb = Workbook()
             for gv in tqdm(departments):
                 pop_pandas_current = pop_pandas[pop_pandas['Department'] == gv].drop(columns='Department')
+                pop_pandas_current = pop_pandas_current.set_index(['day', 'Health', 'Work', 'Age']).reset_index(
+                    drop=False)
                 values = [pop_pandas_current.columns] + list(pop_pandas_current.values)
                 name_gv = gv if len(gv) < 31 else gv[:15]
                 wb.new_sheet(name_gv, data=values)

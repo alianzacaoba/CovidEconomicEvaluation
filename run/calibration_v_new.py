@@ -10,26 +10,26 @@ from root import DIR_OUTPUT
 start_processing_s_t = time.process_time()
 start_time_t = datetime.datetime.now()
 
-c_beta_base = np.array((0.016365807406708593, 0.015195432338911278, 0.014413577299103739, 0.015032450873958988,
-               0.014314009181017572, 0.013347855520539915))
-c_beta_inf = c_beta_base*0.9
-c_beta_sup = c_beta_base*1.1
-c_death_base = np.array((1.2292383181904216, 0.6713077384948367, 1.11718006011982, 1.1587520607570703,
-                         0.983949846176943, 1.2289271808837245))
-c_death_inf = c_death_base*.9
-c_death_sup = c_death_base*1.1
+c_beta_inf = np.zeros(6)
+c_beta_base = (0.016531517382506206, 0.015117576752108406, 0.014833108642790863, 0.015173372335523787,
+               0.014551978794636808, 0.013349006162455464)
+c_beta_sup = np.ones(6)*0.1
+c_death_inf = np.ones(6)
+c_death_base = (1.1922174346854706, 0.7938417000314903, 1.1184542996783413, 1.1556253539670713, 0.976135469790154,
+                1.1722890049556356)
+c_death_sup = np.ones(6)*2.2
 c_arrival_inf = np.ones(6)*1.0
-c_arrival_base = np.array((28.008438791881524, 13.937260565381386, 28.019878666248914, 22.635142336479415,
-                           27.653506361712104, 28.004883621948935))
+c_arrival_base = (18.797792184172703, 14.437873233137548, 19.478914801206944, 17.936837399957028, 19.595558955321536,
+                  20.96301233051736)
 c_arrival_sup = np.ones(6)*30
 calibration_model = Calibration()
 c_beta_ant = 0.0
 c_death_ant = 0.0
 n_iteration = 0
-days_deaths = {1: 62, 2: 105, 3: 47, 4: 111, 5: 58, 6: 84}
-days_cases = {1: 23, 2: 20, 3: 18, 4: 30, 5: 22, 6: 55}
+days_deaths = {1: 59, 2: 119, 3: 82, 4: 127, 5: 48, 6: 159}
+days_cases = {1: 17, 2: 10, 3: 12, 4: 19, 5: 15, 6: 49}
 n_cases = 5*(len(c_beta_base) + len(c_death_base) + len(c_arrival_base))+1
-c_total = True
+c_total = False
 n_changed = 0
 previous_error = 100000000000000
 while n_changed < 2:
@@ -44,15 +44,9 @@ while n_changed < 2:
     if calibration_model.current_results[0]['error'] < previous_error:
         n_changed = 0
         previous_error = calibration_model.ideal_values['error']
-        c_beta_base = np.array(calibration_model.ideal_values['beta'])
-        c_death_base = np.array(calibration_model.ideal_values['dc'])
-        c_arrival_base = np.array(calibration_model.ideal_values['arrival'])
-        c_beta_inf = np.minimum(np.average([c_beta_base, c_beta_inf], axis=0), c_beta_base * 0.9)
-        c_beta_sup = np.maximum(np.average([c_beta_base, c_beta_sup], axis=0), c_beta_base * 1.1)
-        c_death_inf = np.minimum(np.average([c_death_base, c_death_inf], axis=0), c_death_base * 0.9)
-        c_death_sup = np.maximum(np.average([c_death_base, c_death_sup], axis=0), c_death_sup * 1.1)
-        c_arrival_inf = np.minimum(np.average([c_arrival_base, c_arrival_inf], axis=0), c_arrival_base * 0.9)
-        c_arrival_sup = np.maximum(np.average([c_arrival_base, c_arrival_sup], axis=0), c_arrival_base * 1.1)
+        c_beta_base = calibration_model.ideal_values['beta']
+        c_death_base = calibration_model.ideal_values['dc']
+        c_arrival_base = calibration_model.ideal_values['arrival']
     else:
         n_changed += 1
 

@@ -10,7 +10,7 @@ from root import DIR_OUTPUT
 start_processing_s_t = time.process_time()
 start_time_t = datetime.datetime.now()
 
-c_beta_base = np.array((0.016365807406708593, 0.015195432338911278, 0.014413577299103739, 0.015032450873958988,
+'''c_beta_base = np.array((0.016365807406708593, 0.015195432338911278, 0.014413577299103739, 0.015032450873958988,
                0.014314009181017572, 0.013347855520539915))
 c_beta_inf = c_beta_base*0.9
 c_beta_sup = c_beta_base*1.1
@@ -21,7 +21,18 @@ c_death_sup = c_death_base*1.1
 c_arrival_inf = np.ones(6)*1.0
 c_arrival_base = np.array((28.008438791881524, 13.937260565381386, 28.019878666248914, 22.635142336479415,
                            27.653506361712104, 28.004883621948935))
+c_arrival_sup = np.ones(6)*30'''
+
+c_beta_inf = np.ones(6)*0.0000000000001
+c_beta_base = np.ones(6)*0.5
+c_beta_sup = np.ones(6)
+c_death_inf = np.zeros(6)
+c_death_base = np.ones(6)
+c_death_sup = np.ones(6)*2.2
+c_arrival_inf = np.ones(6)*1.0
+c_arrival_base = np.ones(6)*5
 c_arrival_sup = np.ones(6)*30
+
 calibration_model = Calibration()
 c_beta_ant = 0.0
 c_death_ant = 0.0
@@ -39,7 +50,7 @@ while n_changed < 2:
                                       death_range=[c_death_inf, c_death_base, c_death_sup],
                                       arrival_range=[c_arrival_inf, c_arrival_base, c_arrival_sup],
                                       dates={'days_cases': days_cases, 'days_deaths': days_deaths}, total=c_total,
-                                      iteration=1000+n_iteration, max_shrinks=5, max_no_improvement=50,
+                                      iteration=10+n_iteration, max_shrinks=5, max_no_improvement=50,
                                       min_value_to_iterate=1000)
     if calibration_model.current_results[0]['error'] < previous_error:
         n_changed = 0

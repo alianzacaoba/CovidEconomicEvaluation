@@ -24,12 +24,13 @@ class Calibration(object):
         self.type_params['cost'] = 'BASE_VALUE'
         self.real_cases = pd.read_csv(DIR_INPUT + 'real_cases.csv', sep=';')
         self.real_deaths = pd.read_csv(DIR_INPUT + 'death_cases.csv', sep=';')
+        self.max_day = int(self.real_cases.SYM_DAY.max())
 
     def calculate_point(self, real_case: np.array, real_death: np.array, beta: tuple, dc: tuple, arrival: tuple,
                         dates: dict, total: bool = True):
         print('Parameters \n Beta:', beta, '\n DC:', dc, '\n Arrivals:', arrival)
         sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
-                                     death_coefficient=dc, arrival_coefficient=arrival, sim_length=265)
+                                     death_coefficient=dc, arrival_coefficient=arrival, sim_length=self.max_day)
         if not total:
             sim_results_alt = sim_results.copy()
             for k in range(1, len(sim_results)):
@@ -37,15 +38,18 @@ class Calibration(object):
             del sim_results_alt
         error_cases = list()
         for reg in range(6):
-            weight = real_case[dates['days_cases'][reg + 1]:, reg] / np.max(real_case[:, reg])
-            weight = weight/np.sum(weight)
+            weight = np.array([(i+1-dates['days_cases'][reg + 1])
+                               for i in range(dates['days_cases'][reg + 1], self.max_day+1)]) / \
+                     sum((i+1-dates['days_cases'][reg + 1]) for i in range(dates['days_cases'][reg + 1], self.max_day+1))
             current_error = np.power(sim_results[dates['days_cases'][reg + 1]:, reg] /
                                      real_case[dates['days_cases'][reg + 1]:, reg] - 1, 2)
             error_cases.append(np.sum(np.multiply(weight, current_error)))
         error_deaths = list()
         for reg in range(6):
-            weight = real_death[dates['days_deaths'][reg + 1]:, reg] / np.max(real_death[:, reg])
-            weight = weight / np.sum(weight)
+            weight = np.array([(i + 1 - dates['days_deaths'][reg + 1])
+                               for i in range(dates['days_deaths'][reg + 1], self.max_day+1)]) / \
+                     sum((i + 1 - dates['days_deaths'][reg + 1]) for i in
+                         range(dates['days_deaths'][reg + 1], self.max_day+1))
             current_error = np.power(sim_results[dates['days_deaths'][reg + 1]:, 6 + reg] /
                                      real_death[dates['days_deaths'][reg + 1]:, reg] - 1, 2)
             error_deaths.append(np.sum(np.multiply(weight, current_error)))
@@ -92,6 +96,7 @@ class Calibration(object):
                         max_shrinks: int = 5, max_no_improvement: int = 100, min_value_to_iterate: float = 10000.0):
         start_processing_s = time.process_time()
         start_time = datetime.datetime.now()
+
         real_case = np.array((self.real_cases[['TOTAL_1', 'TOTAL_2', 'TOTAL_3', 'TOTAL_4', 'TOTAL_5', 'TOTAL_6']]
                               if total else self.real_cases[['NEW_1', 'NEW_2', 'NEW_3', 'NEW_4', 'NEW_5', 'NEW_6']]),
                              dtype='float64')
@@ -347,12 +352,6 @@ class Calibration(object):
                 best_values[len(best_values)] = v_reflection
         elif v_reflection['error'] < worst_point['error']:
             print('Outside contraction')
-            exists = False
-            for vi in best_values:
-                if v_reflection == best_values[vi]:
-                    exists = True
-            if not exists:
-                best_values[len(best_values)] = v_reflection
             outside_contraction_point = np.maximum(np_centroid + beta_p*(np_centroid-np_worst_point), 0.0)
             beta = tuple(outside_contraction_point[0, :].tolist())
             dc = tuple(outside_contraction_point[1, :].tolist())
@@ -368,6 +367,12 @@ class Calibration(object):
                                                              dc=dc, arrival=arrival, dates=dates, total=total)
                 self.results.append(v_outside_contraction)
             if v_outside_contraction['error'] < v_reflection['error']:
+                exists = False
+                for vi in best_values:
+                    if v_reflection == best_values[vi]:
+                        exists = True
+                if not exists:
+                    best_values[len(best_values)] = v_reflection
                 exists = False
                 for vi in best_values:
                     if v_outside_contraction == best_values[vi]:

@@ -389,7 +389,7 @@ class Model(object):
                                     cur_v_2 += sum(dv_2_dt)
 
                                 percent = np.array(i_1) + np.array(i_2) if wv == 'M' else np.array(i_1)
-                                percent_change = min(beta[cur_region] * np.dot(1 - percent, contacts),1.0)
+                                percent_change = min(beta[cur_region] * np.dot(percent, contacts),1.0)
                                 #(1 - float(np.prod(np.power(1 - percent, contacts))))
                                 contagion_sus = cur_su * percent_change
                                 contagion_f_1 = cur_f_1 * percent_change

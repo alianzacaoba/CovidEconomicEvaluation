@@ -10,28 +10,31 @@ from root import DIR_OUTPUT
 start_processing_s_t = time.process_time()
 start_time_t = datetime.datetime.now()
 
-'''c_beta_base = np.array((0.016365807406708593, 0.015195432338911278, 0.014413577299103739, 0.015032450873958988,
-               0.014314009181017572, 0.013347855520539915))
+''' beta : (0.015214414449999901, 0.014687559412714796, 0.013534606893713143, 0.014790915789624548, 
+0.013498338154962937, 0.012507595349096866)
+dc : (1.4617384461017835, 0.9368353193002283, 1.1204263956170062, 1.0444619838337001, 1.4319438462943168, 
+1.6058498865338446)
+arrival : (27.183292359067348, 9.730573765183337, 33.90194771637668, 13.544846736198476, 33.80045229696106, 
+34.6074539432445)
+error_cases : (0.3330180059536827, 0.13823762851975097, 0.1929584303547453, 0.1634628364922416, 0.2167009591928125, 
+0.14154887323094312)
+error_deaths : (0.3513654012590485, 0.19525489509516827, 0.1778453094031537, 0.22200372950693953, 0.25795356231270633, 
+0.17969900866341648)
+error : 0.2031598770822587
+'''
+
+c_beta_base = np.array((0.015214414449999901, 0.014687559412714796, 0.013534606893713143, 0.014790915789624548,
+                        0.013498338154962937, 0.012507595349096866))
 c_beta_inf = c_beta_base*0.9
 c_beta_sup = c_beta_base*1.1
-c_death_base = np.array((1.2292383181904216, 0.6713077384948367, 1.11718006011982, 1.1587520607570703,
-                         0.983949846176943, 1.2289271808837245))
+c_death_base = np.array((1.4617384461017835, 0.9368353193002283, 1.1204263956170062, 1.0444619838337001,
+                         1.4319438462943168, 1.6058498865338446))
 c_death_inf = c_death_base*.9
 c_death_sup = c_death_base*1.1
 c_arrival_inf = np.ones(6)*1.0
-c_arrival_base = np.array((28.008438791881524, 13.937260565381386, 28.019878666248914, 22.635142336479415,
-                           27.653506361712104, 28.004883621948935))
-c_arrival_sup = np.ones(6)*30'''
-
-c_beta_inf = np.ones(6)*0.0000000000001
-c_beta_base = np.ones(6)*0.5
-c_beta_sup = np.ones(6)
-c_death_inf = np.zeros(6)
-c_death_base = np.ones(6)
-c_death_sup = np.ones(6)*2.2
-c_arrival_inf = np.ones(6)*1.0
-c_arrival_base = np.ones(6)*5
-c_arrival_sup = np.ones(6)*30
+c_arrival_base = np.array((27.183292359067348, 9.730573765183337, 33.90194771637668, 13.544846736198476,
+                           33.80045229696106, 34.6074539432445))
+c_arrival_sup = np.ones(6)*36
 
 calibration_model = Calibration()
 c_beta_ant = 0.0
@@ -50,7 +53,7 @@ while n_changed < 2:
                                       death_range=[c_death_inf, c_death_base, c_death_sup],
                                       arrival_range=[c_arrival_inf, c_arrival_base, c_arrival_sup],
                                       dates={'days_cases': days_cases, 'days_deaths': days_deaths}, total=c_total,
-                                      iteration=10+n_iteration, max_shrinks=5, max_no_improvement=50,
+                                      iteration=10000+n_iteration, max_shrinks=5, max_no_improvement=50,
                                       min_value_to_iterate=1000)
     if calibration_model.current_results[0]['error'] < previous_error:
         n_changed = 0
@@ -80,12 +83,12 @@ print('Total cycles:', n_iteration)
 print('Optimum:')
 for oc in calibration_model.ideal_values:
     print(" ", oc, ":", calibration_model.ideal_values[oc])
-with open(DIR_OUTPUT + 'calibration_consolidated_results_2_' + ('total' if c_total else 'new') + '.json', 'w') as fp:
+with open(DIR_OUTPUT + 'calibration_consolidated_results_5_' + ('total' if c_total else 'new') + '.json', 'w') as fp:
     json.dump(calibration_model.results, fp)
 results_pd_c = pd.DataFrame(calibration_model.results)
 c_values = [results_pd_c.columns] + list(results_pd_c.values)
 c_wb = Workbook()
 c_wb.new_sheet('All_values', data=c_values)
-c_wb.save(DIR_OUTPUT + 'calibration_nm_results_' + ('total' if c_total else 'new') + '.xlsx')
-print('Excel ', DIR_OUTPUT + 'calibration_consolidated_results_' + ('total' if c_total else 'new') + '.xlsx',
+c_wb.save(DIR_OUTPUT + 'calibration_consolidated_results_5_' + ('total' if c_total else 'new') + '.xlsx')
+print('Excel ', DIR_OUTPUT + 'calibration_consolidated_results_5_' + ('total' if c_total else 'new') + '.xlsx',
       'exported')

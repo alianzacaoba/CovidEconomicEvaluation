@@ -28,7 +28,7 @@ class Calibration(object):
 
     def calculate_point(self, real_case: np.array, real_death: np.array, beta: tuple, dc: tuple, arrival: tuple,
                         dates: dict, total: bool = True):
-        print('Parameters \n Beta:', beta, '\n DC:', dc, '\n Arrivals:', arrival)
+        #  print('Parameters \n Beta:', beta, '\n DC:', dc, '\n Arrivals:', arrival)
         sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
                                      death_coefficient=dc, arrival_coefficient=arrival, sim_length=self.max_day)
         if not total:
@@ -40,7 +40,8 @@ class Calibration(object):
         for reg in range(6):
             weight = np.array([(i+1-dates['days_cases'][reg + 1])
                                for i in range(dates['days_cases'][reg + 1], self.max_day+1)]) / \
-                     sum((i+1-dates['days_cases'][reg + 1]) for i in range(dates['days_cases'][reg + 1], self.max_day+1))
+                     sum((i+1-dates['days_cases'][reg + 1]) for i in range(dates['days_cases'][reg + 1],
+                                                                           self.max_day+1))
             current_error = np.power(sim_results[dates['days_cases'][reg + 1]:, reg] /
                                      real_case[dates['days_cases'][reg + 1]:, reg] - 1, 2)
             error_cases.append(np.sum(np.multiply(weight, current_error)))
@@ -54,11 +55,11 @@ class Calibration(object):
                                      real_death[dates['days_deaths'][reg + 1]:, reg] - 1, 2)
             error_deaths.append(np.sum(np.multiply(weight, current_error)))
         error = float((5 * sum(error_cases) + sum(error_deaths))/36)
-        print(' Cases error:', error_cases, '\n Deaths error:', error_deaths, '\n Total error:', error)
+        #  print(' Cases error:', error_cases, '\n Deaths error:', error_deaths, '\n Total error:', error)
         return {'beta': tuple(beta), 'dc': tuple(dc), 'arrival': tuple(arrival), 'error_cases': tuple(error_cases),
                  'error_deaths': tuple(error_deaths), 'error': error}
 
-    def try_new_best(self, new_point: dict, iteration: int, real_case: np.array, real_death: np.array, dates: dict,
+    def try_new_best(self, new_point: dict, real_case: np.array, real_death: np.array, dates: dict,
                      total: bool = True):
         beta = list()
         dc = list()
@@ -85,7 +86,6 @@ class Calibration(object):
             for point in self.current_results:
                 if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival:
                     return None
-            print('Trying new point', iteration)
             return self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc, arrival=arrival,
                                         dates=dates, total=total)
 
@@ -93,7 +93,7 @@ class Calibration(object):
 
     def run_calibration(self, beta_range: list, death_range: list, arrival_range: list, dates: dict,
                         dimensions: int = 18, initial_cases: int = 30, total: bool = True, iteration: int = 1,
-                        max_shrinks: int = 5, max_no_improvement: int = 100, min_value_to_iterate: float = 10000.0):
+                        max_shrinks: int = 100, max_no_improvement: int = 100, min_value_to_iterate: float = 10000.0):
         start_processing_s = time.process_time()
         start_time = datetime.datetime.now()
 
@@ -133,7 +133,7 @@ class Calibration(object):
         elif self.ideal_values['error'] > v_new['error']:
             best_error = v_new['error']
             self.ideal_values = v_new
-            new_try = self.try_new_best(new_point=v_new, iteration=2, real_case=real_case, real_death=real_death,
+            new_try = self.try_new_best(new_point=v_new, real_case=real_case, real_death=real_death,
                               dates=dates, total=total)
             if new_try is not None:
                 if self.ideal_values['error'] > new_try['error']:
@@ -145,7 +145,7 @@ class Calibration(object):
                     self.current_results.append(new_try)
         else:
             best_error = self.ideal_values['error']
-            new_try = self.try_new_best(new_point=v_new, iteration=1, real_case=real_case, real_death=real_death,
+            new_try = self.try_new_best(new_point=v_new, real_case=real_case, real_death=real_death,
                                         dates=dates, total=total)
             if new_try is not None:
                 if self.ideal_values['error'] > new_try['error']:
@@ -173,7 +173,7 @@ class Calibration(object):
             if best_error > v_new['error']:
                 best_error = v_new['error']
                 self.ideal_values = v_new
-            new_try = self.try_new_best(new_point=v_new, iteration=int(i + 2), real_case=real_case,
+            new_try = self.try_new_best(new_point=v_new, real_case=real_case,
                                         real_death=real_death, dates=dates, total=total)
             if new_try is not None:
                 if self.ideal_values['error'] > new_try['error']:
@@ -212,25 +212,25 @@ class Calibration(object):
                     if best_results_n[vi] not in self.current_results:
                         self.current_results.append(best_results_n[vi])
 
-                n_no_changes = n_no_changes + 1 if best_results_n[0] == best_results[0] else 0
                 best_results = best_results_n
                 self.ideal_values = best_results[0]
                 for v_test in range(1, len(best_results)):
-                    new_try = self.try_new_best(new_point=best_results[v_test], iteration=int(i + 1),
-                                                real_case=real_case, real_death=real_death, dates=dates, total=total)
+                    new_try = self.try_new_best(new_point=best_results[v_test], real_case=real_case,
+                                                real_death=real_death, dates=dates, total=total)
                     if new_try is not None:
                         if self.ideal_values['error'] > new_try['error']:
                             self.ideal_values = new_try
-                            n_no_changes = 0
                         if new_try not in self.results:
                             self.results.append(new_try)
                         if new_try not in self.current_results:
                             self.current_results.append(new_try)
-                            best_results = pd.DataFrame(self.current_results).drop_duplicates(ignore_index=True)
-                            best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(
-                                dimensions + 1)
-                            best_results = best_results.to_dict(orient='index')
-
+                best_results = pd.DataFrame(self.current_results).drop_duplicates(ignore_index=True)
+                best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(
+                    dimensions + 1)
+                best_results = best_results.to_dict(orient='index')
+                n_no_changes = 0 if round(self.ideal_values['error'], 7) < round(best_error) else \
+                    n_no_changes + 1
+                best_error = self.ideal_values['error']
                 print('Current best results:')
                 for iv in self.ideal_values:
                     print(iv, ":", self.ideal_values[iv])

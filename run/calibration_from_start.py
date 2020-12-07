@@ -11,13 +11,13 @@ start_processing_s_t = time.process_time()
 start_time_t = datetime.datetime.now()
 
 c_beta_inf = np.ones(6)*0.0000000000001
-c_beta_base = np.ones(6)*0.1
-c_beta_sup = np.ones(6)
+c_beta_base = np.ones(6)*0.01
+c_beta_sup = np.ones(6)*0.5
 c_death_inf = np.zeros(6)
 c_death_base = np.ones(6)
 c_death_sup = np.ones(6)*2.2
 c_arrival_inf = np.ones(6)*1.0
-c_arrival_base = np.ones(6)*5
+c_arrival_base = np.ones(6)*15
 c_arrival_sup = np.ones(6)*30
 calibration_model = Calibration()
 c_beta_ant = 0.0
@@ -29,14 +29,14 @@ n_cases = 5*(len(c_beta_base) + len(c_death_base) + len(c_arrival_base))+1
 c_total = True
 n_changed = 0
 previous_error = 100000000000000
-while n_changed < 2:
+while n_changed < 5:
     n_iteration += 1
     print('Cycle number:', n_iteration)
     calibration_model.run_calibration(initial_cases=n_cases, beta_range=[c_beta_inf, c_beta_base, c_beta_sup],
                                       death_range=[c_death_inf, c_death_base, c_death_sup],
                                       arrival_range=[c_arrival_inf, c_arrival_base, c_arrival_sup],
                                       dates={'days_cases': days_cases, 'days_deaths': days_deaths}, total=c_total,
-                                      iteration=n_iteration, max_shrinks=5, max_no_improvement=50,
+                                      iteration=10+n_iteration, max_shrinks=100, max_no_improvement=100,
                                       min_value_to_iterate=1000)
     if calibration_model.current_results[0]['error'] < previous_error:
         n_changed = 0
@@ -66,12 +66,13 @@ print('Total cycles:', n_iteration)
 print('Optimum:')
 for oc in calibration_model.ideal_values:
     print(" ", oc, ":", calibration_model.ideal_values[oc])
-with open(DIR_OUTPUT + 'calibration_consolidated_results_2_' + ('total' if c_total else 'new') + '.json', 'w') as fp:
+with open(DIR_OUTPUT + 'calibration_consolidated_results_from_start_' +
+          ('total' if c_total else 'new') + '.json', 'w') as fp:
     json.dump(calibration_model.results, fp)
 results_pd_c = pd.DataFrame(calibration_model.results)
 c_values = [results_pd_c.columns] + list(results_pd_c.values)
 c_wb = Workbook()
 c_wb.new_sheet('All_values', data=c_values)
-c_wb.save(DIR_OUTPUT + 'calibration_nm_results_' + ('total' if c_total else 'new') + '.xlsx')
-print('Excel ', DIR_OUTPUT + 'calibration_consolidated_results_' + ('total' if c_total else 'new') + '.xlsx',
+c_wb.save(DIR_OUTPUT + 'calibration_nm_results_from_start_' + ('total' if c_total else 'new') + '.xlsx')
+print('Excel ', DIR_OUTPUT + 'calibration_nm_results_from_start_' + ('total' if c_total else 'new') + '.xlsx',
       'exported')

@@ -25,12 +25,12 @@ df['OTHER'] = df[['retail_and_recreation_percent_change_from_baseline',
                   'parks_percent_change_from_baseline',
                   'transit_stations_percent_change_from_baseline']].mean(axis=1)
 df.rename(columns={'workplaces_percent_change_from_baseline': 'WORK',
-                   'residential_percent_change_from_baseline': 'HOUSE'}, inplace=True)
-df = df[['REGIONS', 'DATE', 'WORK', 'HOUSE', 'OTHER']]
+                   'residential_percent_change_from_baseline': 'HOME'}, inplace=True)
+df = df[['REGIONS', 'DATE', 'WORK', 'HOME', 'OTHER']]
 df = df[df.DATE >= dt.datetime(year=2020, month=2, day=21)]
 df['SIM_DAY'] = (df.DATE - dt.datetime(year=2020, month=2, day=21)).dt.days
-df[['WORK', 'HOUSE', 'OTHER']] = df[['WORK', 'HOUSE', 'OTHER']]/100
-df = df[['DATE', 'SIM_DAY', 'REGIONS', 'WORK', 'HOUSE', 'OTHER']]
+df[['WORK', 'HOME', 'OTHER']] = df[['WORK', 'HOME', 'OTHER']]/100
+df = df[['DATE', 'SIM_DAY', 'REGIONS', 'WORK', 'HOME', 'OTHER']]
 df['SCHOOL'] = df.DATE.apply(lambda x: -1.0 if x >= dt.datetime(year=2020, month=3, day=24) else 0.0)
 df.fillna(df.mean(), inplace=True)
 print('Values selected', dt.datetime.now())

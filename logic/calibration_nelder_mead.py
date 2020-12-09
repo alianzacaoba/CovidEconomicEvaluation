@@ -38,26 +38,24 @@ class Calibration(object):
             del sim_results_alt
         error_cases = list()
         for reg in range(6):
-            weight = np.array([(i+1-dates['days_cases'][reg + 1])
+            weight = np.array([(i+1-dates['days_cases'][reg + 1])**2
                                for i in range(dates['days_cases'][reg + 1], self.max_day+1)]) / \
-                     sum((i+1-dates['days_cases'][reg + 1]) for i in range(dates['days_cases'][reg + 1],
-                                                                           self.max_day+1))
+                     sum((i+1-dates['days_cases'][reg + 1])**2 for i in range(dates['days_cases'][reg + 1], self.max_day+1))
             current_error = np.power(sim_results[dates['days_cases'][reg + 1]:, reg] /
                                      real_case[dates['days_cases'][reg + 1]:, reg] - 1, 2)
             error_cases.append(np.sum(np.multiply(weight, current_error)))
         error_deaths = list()
         for reg in range(6):
-            weight = np.array([(i + 1 - dates['days_deaths'][reg + 1])
+            weight = np.array([(i + 1 - dates['days_deaths'][reg + 1])**2
                                for i in range(dates['days_deaths'][reg + 1], self.max_day+1)]) / \
-                     sum((i + 1 - dates['days_deaths'][reg + 1]) for i in
+                     sum((i + 1 - dates['days_deaths'][reg + 1])**2 for i in
                          range(dates['days_deaths'][reg + 1], self.max_day+1))
             current_error = np.power(sim_results[dates['days_deaths'][reg + 1]:, 6 + reg] /
                                      real_death[dates['days_deaths'][reg + 1]:, reg] - 1, 2)
             error_deaths.append(np.sum(np.multiply(weight, current_error)))
         error = float((5 * sum(error_cases) + sum(error_deaths))/36)
         #  print(' Cases error:', error_cases, '\n Deaths error:', error_deaths, '\n Total error:', error)
-        return {'beta': tuple(beta), 'dc': tuple(dc), 'arrival': tuple(arrival), 'error_cases': tuple(error_cases),
-                 'error_deaths': tuple(error_deaths), 'error': error}
+        return {'beta': tuple(beta), 'dc': tuple(dc), 'arrival': tuple(arrival), 'error_cases': tuple(error_cases), 'error_deaths': tuple(error_deaths), 'error': error}
 
     def try_new_best(self, new_point: dict, real_case: np.array, real_death: np.array, dates: dict,
                      total: bool = True):
@@ -114,10 +112,8 @@ class Calibration(object):
         dc = list()
         arrival = list()
         for i in range(6):
-            x_beta.append(np.random.triangular(beta_range[0][i], beta_range[1][i], beta_range[2][i],
-                                               size=initial_cases))
-            x_d_c.append(np.random.triangular(death_range[0][i], death_range[1][i], death_range[2][i],
-                                               size=initial_cases))
+            x_beta.append(np.random.triangular(beta_range[0][i], beta_range[1][i], beta_range[2][i], size=initial_cases))
+            x_d_c.append(np.random.triangular(death_range[0][i], death_range[1][i], death_range[2][i], size=initial_cases))
             x_arrival.append(np.random.triangular(arrival_range[0][i], arrival_range[1][i], arrival_range[2][i],
                                                   size=initial_cases))
             beta.append(beta_range[1][i])
@@ -134,21 +130,12 @@ class Calibration(object):
         if self.ideal_values is None:
             best_error = v_new['error']
             self.ideal_values = v_new
-        elif self.ideal_values['error'] > v_new['error']:
-            best_error = v_new['error']
-            self.ideal_values = v_new
-            new_try = self.try_new_best(new_point=v_new, real_case=real_case, real_death=real_death,
-                              dates=dates, total=total)
-            if new_try is not None:
-                if self.ideal_values['error'] > new_try['error']:
-                    best_error = new_try['error']
-                    self.ideal_values = new_try
-                if new_try not in self.results:
-                    self.results.append(new_try)
-                if new_try not in self.current_results:
-                    self.current_results.append(new_try)
         else:
-            best_error = self.ideal_values['error']
+            if self.ideal_values['error'] > v_new['error']:
+                best_error = v_new['error']
+                self.ideal_values = v_new
+            else:
+                best_error = self.ideal_values['error']
             new_try = self.try_new_best(new_point=v_new, real_case=real_case, real_death=real_death,
                                         dates=dates, total=total)
             if new_try is not None:
@@ -226,8 +213,7 @@ class Calibration(object):
                 best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(
                     dimensions + 1)
                 best_results = best_results.to_dict(orient='index')
-                n_no_changes = 0 if round(self.ideal_values['error'], error_precision) < \
-                                    round(best_error, error_precision) else n_no_changes + 1
+                n_no_changes = 0 if round(self.ideal_values['error'], error_precision) < round(best_error, error_precision) else n_no_changes + 1
                 best_error = self.ideal_values['error']
                 print('Current best results:')
                 for iv in self.ideal_values:
@@ -279,8 +265,7 @@ class Calibration(object):
         np_worst_point = np.array([worst_point['beta'], worst_point['dc'], worst_point['arrival']])
         for vi in range(len(best_values)-1):
             weights.append(float(abs(best_values[vi]['error']-worst_point['error']) /
-                           (sum(sum((best_values[vi][var][i]-worst_point[var][i])**2 for i in range(6))
-                             for var in ['beta', 'dc', 'arrival'])**0.5)))
+                           (sum(sum((best_values[vi][var][i]-worst_point[var][i])**2 for i in range(6)) for var in ['beta', 'dc', 'arrival'])**0.5)))
 
         if sum(weights) == 0:
             for vi in range(len(best_values)-1):
@@ -310,8 +295,7 @@ class Calibration(object):
                 calculate = False
                 v_reflection = point
         if calculate:
-            v_reflection = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
-                                            arrival=arrival, dates=dates, total=total)
+            v_reflection = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc, arrival=arrival, dates=dates, total=total)
             self.results.append(v_reflection)
         if v_reflection['error'] < best_values[0]['error']:
             print('Expansion')
@@ -332,8 +316,7 @@ class Calibration(object):
                     calculate = False
                     v_expansion = point
             if calculate:
-                v_expansion = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
-                                                    arrival=arrival, dates=dates, total=total)
+                v_expansion = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc, arrival=arrival, dates=dates, total=total)
                 self.results.append(v_expansion)
             exists = False
             for vi in best_values:
@@ -394,9 +377,7 @@ class Calibration(object):
                             calculate = False
                             v_shrink = point
                     if calculate:
-                        v_shrink = self.calculate_point(real_case=real_case, real_death=real_death,
-                                                                     beta=beta, dc=dc,
-                                                                     arrival=arrival, dates=dates, total=total)
+                        v_shrink = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc, arrival=arrival, dates=dates, total=total)
                         self.results.append(v_shrink)
                     best_values[len(best_values)] = v_shrink
         else:
@@ -412,9 +393,7 @@ class Calibration(object):
                     calculate = False
                     v_inside_contraction = point
             if calculate:
-                v_inside_contraction = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta,
-                                                             dc=dc,
-                                                             arrival=arrival, dates=dates, total=total)
+                v_inside_contraction = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc, arrival=arrival, dates=dates, total=total)
                 self.results.append(v_inside_contraction)
             if v_inside_contraction['error'] < v_reflection['error']:
                 exists = False

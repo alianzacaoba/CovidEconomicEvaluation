@@ -77,7 +77,7 @@ class Model(object):
         del con_matrix_other
         del con_matrix_work
         del con_matrix_school
-        self.contact_matrix_coefficients = pd.read_csv(DIR_INPUT + 'contact_matrix_coefficients.csv', sep=';')
+        self.contact_matrix_coefficients = pd.read_csv(DIR_INPUT + 'contact_matrix_coefficients.csv')
         self.max_cm_days = int(self.contact_matrix_coefficients.SIM_DAY.max())
         self.contact_matrix_coefficients.set_index(['SIM_DAY', 'REGIONS'], inplace=True)
         self.contact_matrix_coefficients = self.contact_matrix_coefficients.to_dict(orient='index')

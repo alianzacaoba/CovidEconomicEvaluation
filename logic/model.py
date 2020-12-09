@@ -133,7 +133,7 @@ class Model(object):
         #   3) 'non-vaccination': model
         # SU, E, A, R_A, P, Sy, C, H, I, R, D, Cases
 
-        # export_type = {'all', 'json', 'csv', 'xlsx}
+        # export_type = {'all', 'json', 'csv', 'xlsx'}
         population = dict()
         departments = self.departments
         age_groups = self.age_groups

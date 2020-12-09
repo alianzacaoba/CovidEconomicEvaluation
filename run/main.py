@@ -46,26 +46,26 @@ error_cases : (0.1710738861634178, 0.028753950929803408, 0.07452207536930135, 0.
 error_deaths : (0.2352147405621718, 0.044984896535603794, 0.09019176524800784, 0.08694932754570311, 0.16925082236381206, 
 0.15474358373683328)
 error : 0.09336848687926873'''
-c_beta_base = (0.016365807406708593, 0.015195432338911278, 0.014413577299103739, 0.015032450873958988,
-               0.014314009181017572, 0.013347855520539915)
-c_death_base = (1.2292383181904216, 0.6713077384948367, 1.11718006011982, 1.1587520607570703, 0.983949846176943,
-                1.2289271808837245)
-c_arrival_base = (28.008438791881524, 13.937260565381386, 28.019878666248914, 22.635142336479415, 27.653506361712104,
-                  28.004883621948935)
+c_beta_base = (0.01519100505126856, 0.014838261362646283, 0.013142123703551039, 0.014726632450748005,
+                0.01318191932942572, 0.01134869046564805)
+c_death_base = (1.949496206551241, 0.703527243256728, 1.1678353094368128, 1.3369603028977015, 1.201501924461729,
+                1.1770122885743886)
+c_arrival_base = (28.668691145670273, 9.452637543436861, 53.26658287268866, 13.88634300843865, 59.62609348216185,
+                  117.90863544243574)
+''' beta : (0.01519100505126856, 0.014838261362646283, 0.013142123703551039, 0.014726632450748005, 0.01318191932942572, 
+0.01134869046564805)
+dc : (1.949496206551241, 0.703527243256728, 1.1678353094368128, 1.3369603028977015, 1.201501924461729, 
+1.1770122885743886)
+arrival : (28.668691145670273, 9.452637543436861, 53.26658287268866, 13.88634300843865, 59.62609348216185, 
+117.90863544243574)
+error_cases : (0.33294696873679985, 0.1351158858190471, 0.16171578622548655, 0.16285746468334683, 0.17231470178003633, 
+0.02092146818336201)
+error_deaths : (0.3347202462784802, 0.1472034156853866, 0.13056155539789577, 0.19782333525898665, 0.17332297591029128, 
+0.015898246831903544)
+error : 0.1646914209028705
+'''
 
 c_name = 'no_vac'
-model_ex.run(type_params=type_paramsA, name=c_name, run_type='no_vaccination', beta=c_beta_base,
-             arrival_coefficient=c_arrival_base, death_coefficient=c_death_base,
-             sim_length=365*3, export_type='all')
-c_name = 'no_vac_json'
-model_ex.run(type_params=type_paramsA, name=c_name, run_type='no_vaccination', beta=c_beta_base,
-             arrival_coefficient=c_arrival_base, death_coefficient=c_death_base,
-             sim_length=365*3, export_type='json')
-c_name = 'no_vac_csv'
-model_ex.run(type_params=type_paramsA, name=c_name, run_type='no_vaccination', beta=c_beta_base,
-             arrival_coefficient=c_arrival_base, death_coefficient=c_death_base,
-             sim_length=365*3, export_type='csv')
-c_name = 'no_vac_xlsx'
 model_ex.run(type_params=type_paramsA, name=c_name, run_type='no_vaccination', beta=c_beta_base,
              arrival_coefficient=c_arrival_base, death_coefficient=c_death_base,
              sim_length=365*3, export_type='xlsx')
@@ -80,7 +80,7 @@ for pvs in priority_vaccine_scenarios:
                      vaccine_capacities=vaccine_information['VACCINE_CAPACITY'],
                      vaccine_effectiveness=vaccine_effectiveness_scenarios[pes],
                      vaccine_start_day=vaccine_start_days,
-                     vaccine_end_day=vaccine_end_days, sim_length=365 * 3)
+                     vaccine_end_day=vaccine_end_days, sim_length=365 * 3, export_type='xlsx')
 
 for pv in type_paramsA:
     type_paramsB = type_paramsA.copy()
@@ -96,8 +96,9 @@ for pv in type_paramsA:
                              vaccine_capacities=vaccine_information['VACCINE_CAPACITY'],
                              vaccine_effectiveness=vaccine_effectiveness_scenarios[pes],
                              vaccine_start_day=vaccine_start_days,
-                             vaccine_end_day=vaccine_end_days, sim_length=365 * 3)
+                             vaccine_end_day=vaccine_end_days, sim_length=365 * 3, export_type='xlsx')
 
         c_name = 'vac_priority_sensitivity_' + pv + '_' + val
         model_ex.run(type_params=type_paramsB, name=c_name, run_type='no_vaccination', beta=c_beta_base,
-                     death_coefficient=c_death_base, arrival_coefficient=c_arrival_base, sim_length=365 * 3)
+                     death_coefficient=c_death_base, arrival_coefficient=c_arrival_base, sim_length=365 * 3,
+                     export_type='xlsx')

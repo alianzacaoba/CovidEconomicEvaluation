@@ -11,8 +11,8 @@ start_processing_s_t = time.process_time()
 start_time_t = datetime.datetime.now()
 
 c_beta_inf = np.ones(6)*0.0000000000001
-c_beta_base = np.ones(6)*0.01
-c_beta_sup = np.ones(6)*0.5
+c_beta_base = np.ones(6)*0.1
+c_beta_sup = np.ones(6)*0.1
 c_death_inf = np.zeros(6)
 c_death_base = np.ones(6)
 c_death_sup = np.ones(6)*2.2
@@ -28,7 +28,7 @@ days_cases = {1: 23, 2: 20, 3: 18, 4: 30, 5: 22, 6: 55}
 n_cases = 5*(len(c_beta_base) + len(c_death_base) + len(c_arrival_base))+1
 c_total = True
 n_changed = 0
-previous_error = 100000000000000
+previous_error = [100000000000000.0]
 while n_changed < 5:
     n_iteration += 1
     print('Cycle number:', n_iteration)
@@ -36,11 +36,16 @@ while n_changed < 5:
                                       death_range=[c_death_inf, c_death_base, c_death_sup],
                                       arrival_range=[c_arrival_inf, c_arrival_base, c_arrival_sup],
                                       dates={'days_cases': days_cases, 'days_deaths': days_deaths}, total=c_total,
-                                      iteration=10+n_iteration, max_shrinks=100, max_no_improvement=100,
-                                      min_value_to_iterate=1000)
-    if calibration_model.current_results[0]['error'] < previous_error:
+                                      iteration=n_iteration, max_no_improvement=100,
+                                      min_value_to_iterate=100000, error_precision=7)
+    print(' End of cycle: ', n_iteration)
+    print(' New error:', calibration_model.ideal_values['error'])
+    print(' Previous errors:', previous_error)
+    print(' Improvement: ', float(previous_error[len(previous_error)-1] -
+                                  calibration_model.ideal_values['error']))
+    print(' No changes in: ', n_changed)
+    if float(calibration_model.ideal_values['error']) < float(previous_error[len(previous_error)-1]):
         n_changed = 0
-        previous_error = calibration_model.ideal_values['error']
         c_beta_base = np.array(calibration_model.ideal_values['beta'])
         c_death_base = np.array(calibration_model.ideal_values['dc'])
         c_arrival_base = np.array(calibration_model.ideal_values['arrival'])
@@ -52,6 +57,7 @@ while n_changed < 5:
         c_arrival_sup = np.maximum(np.average([c_arrival_base, c_arrival_sup], axis=0), c_arrival_base*1.1)
     else:
         n_changed += 1
+    previous_error.append(float(calibration_model.ideal_values['error']))
 
 end_processing_s_t = time.process_time()
 end_time_t = datetime.datetime.now()

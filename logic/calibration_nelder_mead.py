@@ -69,13 +69,16 @@ class Calibration(object):
             if new_point['error_cases'][reg] < self.ideal_values['error_cases'][reg]:
                 beta.append(new_point['beta'][reg])
                 arrival.append(new_point['arrival'][reg])
-                dc.append(new_point['dc'][reg])
+                if new_point['error_deaths'][reg] < self.ideal_values['error_deaths'][reg]:
+                    dc.append(new_point['dc'][reg])
+                else:
+                    dc.append(self.ideal_values['dc'][reg]*new_point['beta'][reg]/self.ideal_values['beta'][reg])
                 changed = True
             else:
                 beta.append(self.ideal_values['beta'][reg])
                 arrival.append(self.ideal_values['arrival'][reg])
                 if new_point['error_deaths'][reg] < self.ideal_values['error_deaths'][reg]:
-                    dc.append((new_point['dc'][reg]+self.ideal_values['dc'][reg])/2)
+                    dc.append(new_point['dc'][reg]*self.ideal_values['beta'][reg]/new_point['beta'][reg])
                     changed = True
                 else:
                     dc.append(self.ideal_values['dc'][reg])
@@ -93,7 +96,8 @@ class Calibration(object):
 
     def run_calibration(self, beta_range: list, death_range: list, arrival_range: list, dates: dict,
                         dimensions: int = 18, initial_cases: int = 30, total: bool = True, iteration: int = 1,
-                        max_shrinks: int = 100, max_no_improvement: int = 100, min_value_to_iterate: float = 10000.0):
+                        max_no_improvement: int = 100, min_value_to_iterate: float = 10000.0,
+                        error_precision: int = 7):
         start_processing_s = time.process_time()
         start_time = datetime.datetime.now()
 
@@ -194,19 +198,13 @@ class Calibration(object):
         print(best_results)
         if self.ideal_values['error'] < min_value_to_iterate:
             i = initial_cases
-            n_shrinks = 0
             n_no_changes = 0
-            while n_shrinks < max_shrinks and n_no_changes < max_no_improvement:
+            while n_no_changes < max_no_improvement:
                 i += 1
                 print('Nelder-Mead iteration', int(i + 1))
                 nelder_mead_result = self.nelder_mead_iteration(best_values=best_results, real_case=real_case,
                                                                 real_death=real_death, dates=dates, total=total,
                                                                 n_relevant=dimensions)
-                if nelder_mead_result['shrink']:
-                    n_shrinks += 1
-                    print('n_shrinks: ', n_shrinks)
-                else:
-                    n_shrinks = 0
                 best_results_n = nelder_mead_result['values']
                 for vi in best_results_n:
                     if best_results_n[vi] not in self.current_results:
@@ -228,8 +226,8 @@ class Calibration(object):
                 best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(
                     dimensions + 1)
                 best_results = best_results.to_dict(orient='index')
-                n_no_changes = 0 if round(self.ideal_values['error'], 7) < round(best_error) else \
-                    n_no_changes + 1
+                n_no_changes = 0 if round(self.ideal_values['error'], error_precision) < \
+                                    round(best_error, error_precision) else n_no_changes + 1
                 best_error = self.ideal_values['error']
                 print('Current best results:')
                 for iv in self.ideal_values:

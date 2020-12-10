@@ -49,12 +49,12 @@ while n_changed < 5:
         c_beta_base = np.array(calibration_model.ideal_values['beta'])
         c_death_base = np.array(calibration_model.ideal_values['dc'])
         c_arrival_base = np.array(calibration_model.ideal_values['arrival'])
-        c_beta_inf = np.minimum(np.average([c_beta_base, c_beta_inf], axis=0), c_beta_base*0.9)
-        c_beta_sup = np.maximum(np.average([c_beta_base, c_beta_sup], axis=0), c_beta_base*1.1)
-        c_death_inf = np.minimum(np.average([c_death_base, c_death_inf], axis=0), c_death_base*0.9)
-        c_death_sup = np.maximum(np.average([c_death_base, c_death_sup], axis=0), c_death_sup*1.1)
-        c_arrival_inf = np.minimum(np.average([c_arrival_base, c_arrival_inf], axis=0), c_arrival_base*0.9)
-        c_arrival_sup = np.maximum(np.average([c_arrival_base, c_arrival_sup], axis=0), c_arrival_base*1.1)
+        c_beta_inf = c_beta_base - np.absolute(c_beta_base - c_beta_inf)/2
+        c_beta_sup = c_beta_base + np.absolute(c_beta_base - c_beta_sup)/2
+        c_death_inf = c_death_base - np.absolute(c_death_base - c_death_inf)/2
+        c_death_sup = c_death_base + np.absolute(c_death_base - c_death_sup)/2
+        c_arrival_inf = c_arrival_base - np.absolute(c_arrival_base - c_arrival_inf)/2
+        c_arrival_sup = c_arrival_base + np.absolute(c_arrival_base - c_arrival_sup)/2
     else:
         n_changed += 1
     previous_error.append(float(calibration_model.ideal_values['error']))

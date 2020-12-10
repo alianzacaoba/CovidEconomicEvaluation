@@ -75,7 +75,7 @@ class Calibration(object):
             else:
                 beta.append(self.ideal_values['beta'][reg])
                 arrival.append(self.ideal_values['arrival'][reg])
-                if new_point['error_deaths'][reg] < self.ideal_values['error_deaths'][reg]:
+                if new_point['error_deaths'][reg] < self.ideal_values['error_deaths'][reg] and new_point['beta'][reg] > 0.0:
                     dc.append(new_point['dc'][reg]*self.ideal_values['beta'][reg]/new_point['beta'][reg])
                     changed = True
                 else:

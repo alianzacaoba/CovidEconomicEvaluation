@@ -67,8 +67,7 @@ c_arrival_base = (29.486905916730898, 9.668472205980201, 54.75314641851789, 14.3
 
 c_name = 'no_vac'
 model_ex.run(type_params=type_paramsA, name=c_name, run_type='no_vaccination', beta=c_beta_base,
-             arrival_coefficient=c_arrival_base, death_coefficient=c_death_base,
-             sim_length=365*3, export_type='xlsx')
+             death_coefficient=c_death_base, arrival_coefficient=c_arrival_base, sim_length=365 * 3, export_type='xlsx')
 
 for pvs in priority_vaccine_scenarios:
     for pes in vaccine_effectiveness_scenarios:
@@ -78,8 +77,7 @@ for pvs in priority_vaccine_scenarios:
                      death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
                      vaccine_priority=priority_vaccine_scenarios[pvs],
                      vaccine_capacities=vaccine_information['VACCINE_CAPACITY'],
-                     vaccine_effectiveness=vaccine_effectiveness_scenarios[pes],
-                     vaccine_start_day=vaccine_start_days,
+                     vaccine_effectiveness=vaccine_effectiveness_scenarios[pes], vaccine_start_day=vaccine_start_days,
                      vaccine_end_day=vaccine_end_days, sim_length=365 * 3, export_type='xlsx')
 
 for pv in type_paramsA:
@@ -95,8 +93,8 @@ for pv in type_paramsA:
                              vaccine_priority=priority_vaccine_scenarios[pvs],
                              vaccine_capacities=vaccine_information['VACCINE_CAPACITY'],
                              vaccine_effectiveness=vaccine_effectiveness_scenarios[pes],
-                             vaccine_start_day=vaccine_start_days,
-                             vaccine_end_day=vaccine_end_days, sim_length=365 * 3, export_type='xlsx')
+                             vaccine_start_day=vaccine_start_days, vaccine_end_day=vaccine_end_days, sim_length=365 * 3,
+                             export_type='xlsx')
 
         c_name = 'vac_priority_sensitivity_' + pv + '_' + val
         model_ex.run(type_params=type_paramsB, name=c_name, run_type='no_vaccination', beta=c_beta_base,

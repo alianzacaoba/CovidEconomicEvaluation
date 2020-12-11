@@ -1,3 +1,4 @@
+from tqdm import tqdm
 from logic.model import Model
 from pyexcelerate import Workbook
 import numpy as np
@@ -10,6 +11,25 @@ from root import DIR_INPUT, DIR_OUTPUT
 
 
 class Calibration(object):
+    '''
+    Nelder-Mead Calibration Class
+
+    attr: Model model: Simulation model that simulates with new parameters to calculate the error
+    attr: ideal_values: dict
+        the best parameters obtained and the corresponding simulation errors
+    results: list
+        the accumulation of the whole set of points simulated during the global optimization.
+    current_results: list
+        the accumulation of the whole set of points simulated during the current/last local optimization.
+    type_params: dict
+        dictionary of parameter type to use during the calibration
+    real_cases: pandas.DataFrame
+        symptomatic cases recorded per region, both daily and accumulated
+    real_deaths: pandas.DataFrame
+        deaths recorded per region, both daily and accumulated
+    max_day: int
+        maximum days for which there is mobility information
+    '''
     def __init__(self):
         self.model = Model()
         self.ideal_values = None
@@ -29,19 +49,19 @@ class Calibration(object):
     def calculate_point(self, real_case: np.array, real_death: np.array, beta: tuple, dc: tuple, arrival: tuple,
                         symptomatic_probability: float, dates: dict, total: bool = True):
         '''
-        :param real_case: Real recorded symptomatic cases during the simulation window
+        :param np.array real_case: Real recorded symptomatic cases during the simulation window
         :param real_death: Real recorded deaths during the simulation
         :param beta: Beta (contagion probabilities) parameters for each region.
-        :param dc:
-        :param arrival:
-        :param symptomatic_probability:
+        :param dc: Death risk probability coefficient parameters for each region.
+        :param arrival: Arrival estimation coefficient parameters for each region.
+        :param symptomatic_probability: Symptomatic probability change coefficient.
         :param dates:
         :param total:
         :return: Dictionary with the input parameters and errors of the simulated point.
         '''
         sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
-                                     death_coefficient=dc, arrival_coefficient=arrival,
-                                     symptomatic_coefficient=symptomatic_probability, sim_length=self.max_day)
+                                     death_coefficient=dc, arrival_coefficient=arrival, sim_length=self.max_day,
+                                     symptomatic_coefficient=symptomatic_probability, use_tqdm=False)
         if not total:
             sim_results_alt = sim_results.copy()
             for k in range(1, len(sim_results)):
@@ -75,6 +95,7 @@ class Calibration(object):
         dc = list()
         arrival = list()
         changed = False
+        result = list()
         for reg in range(6):
             if new_point['error_cases'][reg] < self.ideal_values['error_cases'][reg]:
                 beta.append(new_point['beta'][reg])
@@ -106,25 +127,18 @@ class Calibration(object):
                 if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] ==\
                         new_point['spc']:
                     new_spc = True
-            if orig_spc and new_spc:
+            if not orig_spc:
+                result.append(self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
+                                             arrival=arrival, symptomatic_probability=self.ideal_values['spc'],
+                                             dates=dates, total=total))
+            if not new_spc:
+                result.append(self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
+                                             arrival=arrival, symptomatic_probability=new_point['spc'], dates=dates,
+                                             total=total))
+            if len(result) == 0:
                 return None
-            elif orig_spc:
-                return [self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
-                                             arrival=arrival, symptomatic_probability=new_point['spc'], dates=dates,
-                                             total=total)]
-            elif new_spc:
-                return [self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
-                                             arrival=arrival, symptomatic_probability=self.ideal_values['spc'],
-                                             dates=dates, total=total)]
             else:
-                return [self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
-                                             arrival=arrival, symptomatic_probability=self.ideal_values['spc'],
-                                             dates=dates, total=total),
-                        self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
-                                             arrival=arrival, symptomatic_probability=new_point['spc'], dates=dates,
-                                             total=total)
-                        ]
-
+                return result
         return None
 
     def run_calibration(self, beta_range: list, death_range: list, arrival_range: list,
@@ -205,8 +219,7 @@ class Calibration(object):
         print('Current best results:')
         for iv in self.ideal_values:
             print(' ', iv, ":", self.ideal_values[iv])
-        for i in range(initial_cases):
-            print('Initial iteration', int(i + 2))
+        for i in tqdm(range(initial_cases)):
             beta = [x_beta[0][i], x_beta[1][i], x_beta[2][i], x_beta[3][i], x_beta[4][i], x_beta[5][i]]
             dc = [x_d_c[0][i], x_d_c[1][i], x_d_c[2][i], x_d_c[3][i], x_d_c[4][i], x_d_c[5][i]]
             arrival = [x_arrival[0][i], x_arrival[1][i], x_arrival[2][i], x_arrival[3][i], x_arrival[4][i],
@@ -225,16 +238,16 @@ class Calibration(object):
                                         real_death=real_death, dates=dates, total=total)
             if new_try is not None:
                 for new_point in new_try:
-                    if self.ideal_values['error'] > new_point['error']:
+                    if float(self.ideal_values['error']) > float(new_point['error']):
                         best_error = new_point['error']
                         self.ideal_values = new_point
                     if new_point not in self.results:
                         self.results.append(new_point)
                     if new_point not in self.current_results:
                         self.current_results.append(new_point)
-            print('Current best results:')
-            for iv in self.ideal_values:
-                print(' ', iv, ":", self.ideal_values[iv])
+        print('Current best results:')
+        for iv in self.ideal_values:
+            print(' ', iv, ":", self.ideal_values[iv])
 
         best_results = pd.DataFrame(self.current_results)
         best_results.drop_duplicates(ignore_index=True)
@@ -291,11 +304,10 @@ class Calibration(object):
                 n_no_changes = 0 if round(self.ideal_values['error'], error_precision) \
                                     < round(best_error, error_precision) else n_no_changes + 1
                 best_error = self.ideal_values['error']
-                if (i % 10) == 0:
-                    print('Current best results:')
-                    for iv in self.ideal_values:
-                        print(iv, ":", self.ideal_values[iv])
-                    print('No improvement in best results in :', n_no_changes, 'iterations')
+                print('Current best results:')
+                for iv in self.ideal_values:
+                    print(iv, ":", self.ideal_values[iv])
+                print('No improvement in best results in :', n_no_changes, 'iterations')
         else:
             print('Insufficient error value to iterate over NMS: ', self.ideal_values['error'])
         print('Optimum found:')

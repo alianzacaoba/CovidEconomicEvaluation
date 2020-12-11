@@ -1,5 +1,4 @@
 from typing import List, Any
-
 from logic.compartment import Compartment
 import pandas as pd
 import numpy as np
@@ -127,7 +126,7 @@ class Model(object):
             arrival_coefficient: tuple = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0), vaccine_priority: list = None,
             vaccine_capacities: dict = None, vaccine_effectiveness: dict = None, vaccine_start_day: dict = None,
             vaccine_end_day: dict = None, sim_length: int = 265, export_type: str = 'all',
-            symptomatic_coefficient: float = 1.0):
+            symptomatic_coefficient: float = 1.0, use_tqdm: bool = True):
         # run_type:
         #   1) 'calibration': for calibration purposes, states f1,f2,v1,v2,e_f,a_f do not exist
         #   2) 'vaccination': model with vaccine states
@@ -256,7 +255,8 @@ class Model(object):
                     population_e[wv] = population_w
                 population_g[ev] = population_e
             population[gv] = population_g
-        for t in tqdm(range(sim_length)):
+        iterator = tqdm(range(sim_length)) if use_tqdm else range(sim_length)
+        for t in iterator:
             dep_pob = dict()
             for gv in departments:
                 cur_region = self.regions[gv]-1

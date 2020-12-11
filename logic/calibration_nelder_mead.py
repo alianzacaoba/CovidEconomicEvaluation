@@ -31,7 +31,7 @@ class Calibration(object):
         '''
         :param real_case: Real recorded symptomatic cases during the simulation window
         :param real_death: Real recorded deaths during the simulation
-        :param beta:
+        :param beta: Beta (contagion probabilities) parameters for each region.
         :param dc:
         :param arrival:
         :param symptomatic_probability:

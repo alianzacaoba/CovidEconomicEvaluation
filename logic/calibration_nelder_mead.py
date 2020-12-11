@@ -28,6 +28,17 @@ class Calibration(object):
 
     def calculate_point(self, real_case: np.array, real_death: np.array, beta: tuple, dc: tuple, arrival: tuple,
                         symptomatic_probability: float, dates: dict, total: bool = True):
+        '''
+        :param real_case: Real recorded symptomatic cases during the simulation window
+        :param real_death: Real recorded deaths during the simulation
+        :param beta:
+        :param dc:
+        :param arrival:
+        :param symptomatic_probability:
+        :param dates:
+        :param total:
+        :return: Dictionary with the input parameters and errors of the simulated point.
+        '''
         sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
                                      death_coefficient=dc, arrival_coefficient=arrival,
                                      symptomatic_coefficient=symptomatic_probability, sim_length=self.max_day)

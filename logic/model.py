@@ -126,7 +126,8 @@ class Model(object):
             beta: tuple = (0.5, 0.5, 0.5, 0.5, 0.5, 0.5), death_coefficient: tuple = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
             arrival_coefficient: tuple = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0), vaccine_priority: list = None,
             vaccine_capacities: dict = None, vaccine_effectiveness: dict = None, vaccine_start_day: dict = None,
-            vaccine_end_day: dict = None, sim_length: int = 265, export_type: str = 'all'):
+            vaccine_end_day: dict = None, sim_length: int = 265, export_type: str = 'all',
+            symptomatic_coefficient: float = 1.0):
         # run_type:
         #   1) 'calibration': for calibration purposes, states f1,f2,v1,v2,e_f,a_f do not exist
         #   2) 'vaccination': model with vaccine states
@@ -160,7 +161,7 @@ class Model(object):
         for ev in age_groups:
             t_d[ev] = self.time_params[('t_d', ev)][type_params['t_d']]
             t_r[ev] = self.time_params[('t_r', ev)][type_params['t_r']]
-            p_s[ev] = self.prob_params[('p_s', ev, 'ALL')][type_params['p_s']]
+            p_s[ev] = min(self.prob_params[('p_s', ev, 'ALL')][type_params['p_s']]*symptomatic_coefficient, 1.0)
             for hv in health_groups:
                 p_c[(ev, hv)] = self.prob_params[('p_c', ev, hv)][type_params['p_c']]
                 p_h[(ev, hv)] = self.prob_params[('p_h', ev, hv)][type_params['p_h']]
@@ -390,7 +391,6 @@ class Model(object):
 
                                 percent = np.array(i_1) + np.array(i_2) if wv == 'M' else np.array(i_1)
                                 percent_change = min(beta[cur_region] * np.dot(percent, contacts), 1.0)
-                                #(1 - float(np.prod(np.power(1 - percent, contacts))))
                                 contagion_sus = cur_su * percent_change
                                 contagion_f_1 = cur_f_1 * percent_change
                                 contagion_f_2 = cur_f_2 * percent_change
@@ -511,7 +511,6 @@ class Model(object):
                                 # Run infection
                                 percent = np.array(i_1) + np.array(i_2) if wv == 'M' else np.array(i_1)
                                 percent_change = min(beta[cur_region] * np.dot(percent, contacts), 1.0)
-                                #(1 - float(np.prod(np.power(1 - percent, contacts))))
                                 contagion_sus = cur_su * percent_change
                                 dsu_dt = {-contagion_sus
                                           }

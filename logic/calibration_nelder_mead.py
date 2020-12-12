@@ -6,30 +6,11 @@ import pandas as pd
 import datetime
 import json
 import time
-
 from root import DIR_INPUT, DIR_OUTPUT
 
 
 class Calibration(object):
-    '''
-    Nelder-Mead Calibration Class
 
-    attr: Model model: Simulation model that simulates with new parameters to calculate the error
-    attr: ideal_values: dict
-        the best parameters obtained and the corresponding simulation errors
-    results: list
-        the accumulation of the whole set of points simulated during the global optimization.
-    current_results: list
-        the accumulation of the whole set of points simulated during the current/last local optimization.
-    type_params: dict
-        dictionary of parameter type to use during the calibration
-    real_cases: pandas.DataFrame
-        symptomatic cases recorded per region, both daily and accumulated
-    real_deaths: pandas.DataFrame
-        deaths recorded per region, both daily and accumulated
-    max_day: int
-        maximum days for which there is mobility information
-    '''
     def __init__(self):
         self.model = Model()
         self.ideal_values = None
@@ -48,17 +29,7 @@ class Calibration(object):
 
     def calculate_point(self, real_case: np.array, real_death: np.array, beta: tuple, dc: tuple, arrival: tuple,
                         symptomatic_probability: float, dates: dict, total: bool = True):
-        '''
-        :param np.array real_case: Real recorded symptomatic cases during the simulation window
-        :param real_death: Real recorded deaths during the simulation
-        :param beta: Beta (contagion probabilities) parameters for each region.
-        :param dc: Death risk probability coefficient parameters for each region.
-        :param arrival: Arrival estimation coefficient parameters for each region.
-        :param symptomatic_probability: Symptomatic probability change coefficient.
-        :param dates:
-        :param total:
-        :return: Dictionary with the input parameters and errors of the simulated point.
-        '''
+
         sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
                                      death_coefficient=dc, arrival_coefficient=arrival, sim_length=self.max_day,
                                      symptomatic_coefficient=symptomatic_probability, use_tqdm=False)
@@ -95,7 +66,6 @@ class Calibration(object):
         dc = list()
         arrival = list()
         changed = False
-        result = list()
         for reg in range(6):
             if new_point['error_cases'][reg] < self.ideal_values['error_cases'][reg]:
                 beta.append(new_point['beta'][reg])
@@ -120,6 +90,7 @@ class Calibration(object):
             arrival = tuple(arrival)
             orig_spc = False
             new_spc = False
+            points = list()
             for point in self.current_results:
                 if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] ==\
                         self.ideal_values['spc']:
@@ -128,18 +99,17 @@ class Calibration(object):
                         new_point['spc']:
                     new_spc = True
             if not orig_spc:
-                result.append(self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
-                                             arrival=arrival, symptomatic_probability=self.ideal_values['spc'],
-                                             dates=dates, total=total))
+                points.append(self.ideal_values['spc'])
             if not new_spc:
-                result.append(self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
-                                             arrival=arrival, symptomatic_probability=new_point['spc'], dates=dates,
-                                             total=total))
-            if len(result) == 0:
-                return None
-            else:
-                return result
-        return None
+                points.append(new_point['spc'])
+            for point in points:
+                v_new = self.calculate_point(real_case, real_death, beta, dc, arrival, point, dates, total)
+                if v_new not in self.results:
+                    self.results.append(v_new)
+                if v_new not in self.current_results:
+                    self.current_results.append(v_new)
+                if self.ideal_values['error'] > v_new['error']:
+                    self.ideal_values = v_new
 
     def run_calibration(self, beta_range: list, death_range: list, arrival_range: list,
                         symptomatic_probability_range: list, dates: dict, dimensions: int = 19, initial_cases: int = 30,
@@ -180,42 +150,9 @@ class Calibration(object):
                                      dates=dates, total=total)
         if v_new not in self.results:
             self.results.append(v_new)
-        self.current_results = list()
-        self.current_results.append(v_new)
-        if self.ideal_values is None:
-            best_error = v_new['error']
-            self.ideal_values = v_new
-        elif v_new['error'] < self.ideal_values['error']:
-            best_error = v_new['error']
-            self.ideal_values = v_new
-            new_try = self.try_new_best(new_point=v_new, real_case=real_case, real_death=real_death,
-                              dates=dates, total=total)
-            if new_try is not None:
-                for new_point in new_try:
-                    if self.ideal_values['error'] > new_point['error']:
-                        best_error = new_point['error']
-                        self.ideal_values = new_point
-                    if new_point not in self.results:
-                        self.results.append(new_point)
-                    if new_point not in self.current_results:
-                        self.current_results.append(new_point)
-        else:
-            if self.ideal_values['error'] > v_new['error']:
-                best_error = v_new['error']
-                self.ideal_values = v_new
-            else:
-                best_error = self.ideal_values['error']
-            new_try = self.try_new_best(new_point=v_new, real_case=real_case, real_death=real_death,
-                                        dates=dates, total=total)
-            if new_try is not None:
-                for new_point in new_try:
-                    if self.ideal_values['error'] > new_point['error']:
-                        best_error = new_point['error']
-                        self.ideal_values = new_point
-                    if new_point not in self.results:
-                        self.results.append(new_point)
-                    if new_point not in self.current_results:
-                        self.current_results.append(new_point)
+        self.current_results = [v_new]
+        self.ideal_values = v_new
+
         print('Current best results:')
         for iv in self.ideal_values:
             print(' ', iv, ":", self.ideal_values[iv])
@@ -224,43 +161,29 @@ class Calibration(object):
             dc = [x_d_c[0][i], x_d_c[1][i], x_d_c[2][i], x_d_c[3][i], x_d_c[4][i], x_d_c[5][i]]
             arrival = [x_arrival[0][i], x_arrival[1][i], x_arrival[2][i], x_arrival[3][i], x_arrival[4][i],
                        x_arrival[5][i]]
-            v_new = self.calculate_point(real_case=real_case, real_death=real_death, beta=tuple(beta), dc=tuple(dc),
-                                         arrival=tuple(arrival), symptomatic_probability=x_symptomatic[i], dates=dates,
-                                         total=total)
+            v_new = self.calculate_point(real_case, real_death, tuple(beta), tuple(dc), tuple(arrival),
+                                         x_symptomatic[i], dates, total)
+            self.current_results.append(v_new)
             if v_new not in self.results:
                 self.results.append(v_new)
-            if v_new not in self.current_results:
-                self.current_results.append(v_new)
-            if best_error > v_new['error']:
-                best_error = v_new['error']
+            if v_new['error'] < self.ideal_values['error']:
                 self.ideal_values = v_new
-            new_try = self.try_new_best(new_point=v_new, real_case=real_case,
-                                        real_death=real_death, dates=dates, total=total)
-            if new_try is not None:
-                for new_point in new_try:
-                    if float(self.ideal_values['error']) > float(new_point['error']):
-                        best_error = new_point['error']
-                        self.ideal_values = new_point
-                    if new_point not in self.results:
-                        self.results.append(new_point)
-                    if new_point not in self.current_results:
-                        self.current_results.append(new_point)
+            self.try_new_best(new_point=v_new, real_case=real_case, real_death=real_death, dates=dates, total=total)
+
         print('Current best results:')
         for iv in self.ideal_values:
             print(' ', iv, ":", self.ideal_values[iv])
-
         best_results = pd.DataFrame(self.current_results)
         best_results.drop_duplicates(ignore_index=True)
         best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(dimensions+1)
         best_results = best_results.to_dict(orient='index')
-
-        print(best_results)
         if self.ideal_values['error'] < min_value_to_iterate:
             i = initial_cases
             n_no_changes = 0
             while n_no_changes < max_no_improvement:
                 i += 1
                 print('Nelder-Mead iteration', int(i + 1))
+                best_error = float(self.ideal_values['error'])
                 nelder_mead_result = self.nelder_mead_iteration(best_values=best_results, real_case=real_case,
                                                                 real_death=real_death, dates=dates, total=total,
                                                                 n_relevant=dimensions)
@@ -268,42 +191,22 @@ class Calibration(object):
                 for vi in best_results_n:
                     if best_results_n[vi] not in self.current_results:
                         self.current_results.append(best_results_n[vi])
+                new_tries = list()
                 if self.ideal_values == best_results_n[0]:
                     for v_test in range(1, len(best_results_n)):
-                        if best_results_n[v_test] not in best_results:
-                            print(best_results_n[v_test])
-                            new_try = self.try_new_best(new_point=best_results_n[v_test], real_case=real_case,
-                                                        real_death=real_death, dates=dates, total=total)
-                            if new_try is not None:
-                                for new_point in new_try:
-                                    if self.ideal_values['error'] > new_point['error']:
-                                        best_error = new_point['error']
-                                        self.ideal_values = new_point
-                                    if new_point not in self.results:
-                                        self.results.append(new_point)
-                                    if new_point not in self.current_results:
-                                        self.current_results.append(new_point)
+                        new_tries.append(best_results_n[v_test])
                 else:
                     self.ideal_values = best_results_n[0]
-                    for v_test in range(1, 4):
-                        new_try = self.try_new_best(new_point=best_results[v_test], real_case=real_case,
-                                                    real_death=real_death, dates=dates, total=total)
-                        if new_try is not None:
-                            for new_point in new_try:
-                                if self.ideal_values['error'] > new_point['error']:
-                                    best_error = new_point['error']
-                                    self.ideal_values = new_point
-                                if new_point not in self.results:
-                                    self.results.append(new_point)
-                                if new_point not in self.current_results:
-                                    self.current_results.append(new_point)
+                    for v_test in range(1, 5):
+                        new_tries.append(best_results_n[v_test])
+                for new_try in new_tries:
+                    self.try_new_best(new_try, real_case, real_death, dates, total)
                 best_results = pd.DataFrame(self.current_results).drop_duplicates(ignore_index=True)
                 best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(
                     dimensions + 1)
                 best_results = best_results.to_dict(orient='index')
                 n_no_changes = 0 if round(self.ideal_values['error'], error_precision) \
                                     < round(best_error, error_precision) else n_no_changes + 1
-                best_error = self.ideal_values['error']
                 print('Current best results:')
                 for iv in self.ideal_values:
                     print(iv, ":", self.ideal_values[iv])
@@ -464,28 +367,9 @@ class Calibration(object):
             else:
                 print('Shrink')
                 shrink = True
-                np_best_point = np.array([best_values[0]['beta'], best_values[0]['dc'], best_values[0]['arrival'],
-                                          np.ones(6)*best_values[0]['spc']])
-                for i in range(n_relevant):
-                    np_point = np.array([best_values[i+1]['beta'], best_values[i+1]['dc'], best_values[i+1]['arrival'],
-                                         (best_values[i+1]['spc'] for i in range(6))])
-                    shrink_point = np.maximum(np_point + delta*(np_point-np_best_point), 0.0)
-                    beta = tuple(shrink_point[0, :].tolist())
-                    dc = tuple(shrink_point[1, :].tolist())
-                    arrival = tuple(shrink_point[2, :].tolist())
-                    spc = float(shrink_point[3, 0])
-                    v_shrink = None
-                    calculate = True
-                    for point in self.current_results:
-                        if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival:
-                            calculate = False
-                            v_shrink = point
-                    if calculate:
-                        v_shrink = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
-                                                        arrival=arrival, symptomatic_probability=spc, dates=dates,
-                                                        total=total)
-                        self.results.append(v_shrink)
-                    best_values[len(best_values)] = v_shrink
+                best_values = self.calculate_shrinks(values_list=best_values, n_relevant=n_relevant,
+                                                     real_case=real_case, real_death=real_death, dates=dates,
+                                                     total=total, delta=delta)
         else:
             print('Inside contraction')
             inside_contraction_point = np.maximum(np_centroid + beta_p * (np_centroid - np_worst_point), 0.0)
@@ -514,30 +398,34 @@ class Calibration(object):
             else:
                 print('Shrink')
                 shrink = True
-                np_best_point = np.array([best_values[0]['beta'], best_values[0]['dc'], best_values[0]['arrival'],
-                                          np.ones(6)*best_values[0]['spc']])
-                for i in range(n_relevant):
-                    np_point = np.array(
-                        [best_values[i + 1]['beta'], best_values[i + 1]['dc'], best_values[i + 1]['arrival'],
-                         (best_values[i + 1]['spc'] for i in range(6))])
-                    shrink_point = np.maximum(np_point + delta * (np_point - np_best_point), 0.0)
-                    beta = tuple(shrink_point[0, :].tolist())
-                    dc = tuple(shrink_point[1, :].tolist())
-                    arrival = tuple(shrink_point[2, :].tolist())
-                    spc = float(shrink_point[3, 0])
-                    v_shrink = None
-                    calculate = True
-                    for point in self.current_results:
-                        if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival:
-                            calculate = False
-                            v_shrink = point
-                    if calculate:
-                        v_shrink = self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc,
-                                                        arrival=arrival, symptomatic_probability=spc, dates=dates,
-                                                        total=total)
-                        self.results.append(v_shrink)
-                    best_values[len(best_values)] = v_shrink
+                best_values = self.calculate_shrinks(values_list=best_values, n_relevant=n_relevant,
+                                                     real_case=real_case, real_death=real_death, dates=dates,
+                                                     total=total, delta=delta)
         best_values = pd.DataFrame(best_values).T.drop_duplicates(ignore_index=True)
         best_values = best_values.sort_values(by='error', ascending=True, ignore_index=True).head(n_relevant + 1)
         best_values = best_values.to_dict(orient='index')
         return {'values': best_values, 'shrink': shrink}
+
+    def calculate_shrinks(self, values_list: list, n_relevant: int, real_case: np.array, real_death: np.array,
+                          dates: dict, total: bool = True, delta: float = 0.5):
+        np_best_point = np.array([values_list[0]['beta'], values_list[0]['dc'], values_list[0]['arrival'],
+                                  np.ones(6) * values_list[0]['spc']])
+        results = [np_best_point]
+        for i in range(n_relevant):
+            np_point = np.array([values_list[i + 1]['beta'], values_list[i + 1]['dc'], values_list[i + 1]['arrival'],
+                                 (values_list[i + 1]['spc'] for i in range(6))])
+            shrink_point = np.maximum(np_point + delta * (np_point - np_best_point), 0.0)
+            beta = tuple(shrink_point[0, :].tolist())
+            dc = tuple(shrink_point[1, :].tolist())
+            arrival = tuple(shrink_point[2, :].tolist())
+            spc = float(shrink_point[3, 0])
+            calculate = True
+            for point in self.current_results:
+                if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
+                    calculate = False
+                    results.append(point)
+            if calculate:
+                results.append(self.calculate_point(real_case, real_death, tuple(beta), tuple(dc), tuple(arrival), spc,
+                                                    dates, total))
+
+        return results

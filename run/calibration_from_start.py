@@ -7,9 +7,9 @@ import json
 import time
 from root import DIR_OUTPUT
 
+
 start_processing_s_t = time.process_time()
 start_time_t = datetime.datetime.now()
-
 c_beta_inf = np.ones(6)*0.0000000000001
 c_beta_base = np.ones(6)*0.1
 c_beta_sup = np.ones(6)*0.1

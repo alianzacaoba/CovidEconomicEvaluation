@@ -1,4 +1,4 @@
-from tqdm import tqdm
+import multiprocessing
 from logic.model import Model
 from pyexcelerate import Workbook
 import numpy as np
@@ -7,6 +7,7 @@ import datetime
 import json
 import time
 from root import DIR_INPUT, DIR_OUTPUT
+
 
 
 class Calibration(object):
@@ -26,6 +27,11 @@ class Calibration(object):
         self.real_cases = pd.read_csv(DIR_INPUT + 'real_cases.csv', sep=';')
         self.real_deaths = pd.read_csv(DIR_INPUT + 'death_cases.csv', sep=';')
         self.max_day = int(self.real_cases.SYM_DAY.max())
+
+    @staticmethod
+    def chunks(l, n):
+        for i in range(0, len(l), n):
+            yield l[i:i + n]
 
     def calculate_point(self, real_case: np.array, real_death: np.array, beta: tuple, dc: tuple, arrival: tuple,
                         symptomatic_probability: float, dates: dict, total: bool = True):
@@ -156,13 +162,27 @@ class Calibration(object):
         print('Current best results:')
         for iv in self.ideal_values:
             print(' ', iv, ":", self.ideal_values[iv])
-        for i in tqdm(range(initial_cases)):
+        jobs = list()
+        cores = multiprocessing.cpu_count() - 1
+        print(cores)
+        for i in range(initial_cases):
             beta = [x_beta[0][i], x_beta[1][i], x_beta[2][i], x_beta[3][i], x_beta[4][i], x_beta[5][i]]
             dc = [x_d_c[0][i], x_d_c[1][i], x_d_c[2][i], x_d_c[3][i], x_d_c[4][i], x_d_c[5][i]]
             arrival = [x_arrival[0][i], x_arrival[1][i], x_arrival[2][i], x_arrival[3][i], x_arrival[4][i],
                        x_arrival[5][i]]
-            v_new = self.calculate_point(real_case, real_death, tuple(beta), tuple(dc), tuple(arrival),
-                                         x_symptomatic[i], dates, total)
+            p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta), tuple(dc),
+                                                                           tuple(arrival), x_symptomatic[i], dates,
+                                                                           total), )
+            jobs.append(p)
+        for i in self.chunks(jobs, cores):
+            for j in i:
+                j.start()
+            for j in i:
+                j.join()
+
+            print("ID of process p: {}".format(p.pid))
+
+        for v_new in jobs:
             self.current_results.append(v_new)
             if v_new not in self.results:
                 self.results.append(v_new)
@@ -205,8 +225,7 @@ class Calibration(object):
                 best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(
                     dimensions + 1)
                 best_results = best_results.to_dict(orient='index')
-                n_no_changes = 0 if round(self.ideal_values['error'], error_precision) \
-                                    < round(best_error, error_precision) else n_no_changes + 1
+                n_no_changes = 0 if round(self.ideal_values['error'], error_precision) < round(best_error, error_precision) else n_no_changes + 1
                 print('Current best results:')
                 for iv in self.ideal_values:
                     print(iv, ":", self.ideal_values[iv])

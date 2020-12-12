@@ -289,7 +289,7 @@ class Calibration(object):
         print('Reflection')
         v_reflection = None
         for point in self.current_results:
-            if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival:
+            if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
                 calculate = False
                 v_reflection = point
         if calculate:
@@ -312,7 +312,7 @@ class Calibration(object):
             v_expansion = None
             calculate = True
             for point in self.current_results:
-                if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival:
+                if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
                     calculate = False
                     v_expansion = point
             if calculate:
@@ -343,7 +343,7 @@ class Calibration(object):
             v_outside_contraction = None
             calculate = True
             for point in self.current_results:
-                if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival:
+                if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
                     calculate = False
                     v_outside_contraction = point
             if calculate:
@@ -380,7 +380,7 @@ class Calibration(object):
             v_inside_contraction = None
             calculate = True
             for point in self.current_results:
-                if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival:
+                if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
                     calculate = False
                     v_inside_contraction = point
             if calculate:

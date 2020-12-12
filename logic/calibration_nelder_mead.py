@@ -413,7 +413,7 @@ class Calibration(object):
         results = [np_best_point]
         for i in range(n_relevant):
             np_point = np.array([values_list[i + 1]['beta'], values_list[i + 1]['dc'], values_list[i + 1]['arrival'],
-                                 (values_list[i + 1]['spc'] for i in range(6))])
+                                 np.ones(6) * values_list[i + 1]['spc']])
             shrink_point = np.maximum(np_point + delta * (np_point - np_best_point), 0.0)
             beta = tuple(shrink_point[0, :].tolist())
             dc = tuple(shrink_point[1, :].tolist())

@@ -732,7 +732,8 @@ class Model(object):
                 if export_type == 'all' or export_type == 'xlsx':
                     print('Begin excel exportation')
                     wb = Workbook()
-                    for gv in tqdm(departments):
+                    iterator = tqdm(departments) if use_tqdm else departments
+                    for gv in iterator:
                         pop_pandas_current = pop_pandas[pop_pandas['Department'] == gv].drop(columns='Department')
                         pop_pandas_current = pop_pandas_current.set_index(['day', 'Health', 'Work', 'Age']).reset_index(
                             drop=False)

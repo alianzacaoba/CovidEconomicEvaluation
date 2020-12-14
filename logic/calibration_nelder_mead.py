@@ -1,5 +1,3 @@
-from typing import Any
-
 import multiprocessing
 from logic.model import Model
 from pyexcelerate import Workbook
@@ -107,11 +105,15 @@ class Calibration(object):
                         new_point['spc']:
                     new_spc = True
             if not orig_spc:
-                points.append(self.ideal_values['spc'])
+                points.append((real_case, real_death, beta, dc, arrival, self.ideal_values['spc'], dates, result_list,
+                               total))
             if not new_spc:
-                points.append(new_point['spc'])
-            for point in points:
-                self.calculate_point(real_case, real_death, beta, dc, arrival, point, dates, result_list, total)
+                points.append((real_case, real_death, beta, dc, arrival,  new_point['spc'], dates, result_list, total))
+            if not orig_spc or not new_spc:
+                points.append((real_case, real_death, beta, dc, arrival, (new_point['spc']+self.ideal_values['spc'])/2,
+                               dates, result_list, total))
+            return points
+        return []
 
     def run_calibration(self, beta_range: list, death_range: list, arrival_range: list,
                         symptomatic_probability_range: list, dates: dict, dimensions: int = 19, initial_cases: int = 30,
@@ -155,6 +157,7 @@ class Calibration(object):
                                                                        tuple(arrival), symptomatic_probability, dates,
                                                                        return_list, total))
         jobs.append(p)
+        jobs[0].start()
         for i in range(initial_cases):
             beta = [x_beta[0][i], x_beta[1][i], x_beta[2][i], x_beta[3][i], x_beta[4][i], x_beta[5][i]]
             dc = [x_d_c[0][i], x_d_c[1][i], x_d_c[2][i], x_d_c[3][i], x_d_c[4][i], x_d_c[5][i]]
@@ -163,12 +166,33 @@ class Calibration(object):
             p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta), tuple(dc),
                                                                            tuple(arrival), x_symptomatic[i], dates,
                                                                            return_list, total))
-            jobs.append(p)
-        for i in self.chunks(jobs, cores):
-            for j in i:
-                j.start()
-            for j in i:
-                j.join()
+            if len(jobs) < cores:
+                jobs.append(p)
+                jobs[len(jobs)-1].start()
+            else:
+                available = False
+                while not available:
+                    n_count = 0
+                    for j in range(len(jobs)):
+                        if jobs[j].is_alive():
+                            n_count += 1
+                    if n_count < cores:
+                        available = True
+                        jobs.append(p)
+                        jobs[len(jobs)-1].start()
+                    else:
+                        time.sleep(1)
+
+        available = False
+        while not available:
+            n_count = 0
+            for j in jobs:
+                if j.is_alive():
+                    n_count += 1
+            if n_count == 0:
+                available = True
+            else:
+                time.sleep(1)
 
         manager2 = multiprocessing.Manager()
         return_list2 = manager2.list()
@@ -181,14 +205,37 @@ class Calibration(object):
                 self.ideal_values = v_new
             if v_new not in self.results:
                 self.results.append(v_new)
-            p = multiprocessing.Process(target=self.try_new_best, args=(v_new, real_case, real_death, dates,
-                                                                        return_list2, total))
-            jobs.append(p)
-        for i in self.chunks(jobs, cores):
-            for j in i:
-                j.start()
-            for j in i:
-                j.join()
+            list_to_add = self.try_new_best(v_new, real_case, real_death, dates, return_list2, total)
+            for new_point in list_to_add:
+                p = multiprocessing.Process(target=self.calculate_point, args=new_point)
+                if len(jobs) < cores:
+                    jobs.append(p)
+                    jobs[len(jobs)-1].start()
+                    time.sleep(2)
+                else:
+                    available = False
+                    while not available:
+                        n_count = 0
+                        for j in range(len(jobs)):
+                            if jobs[j].is_alive():
+                                n_count += 1
+                        if n_count < cores:
+                            available = True
+                            jobs.append(p)
+                            jobs[len(jobs)-1].start()
+                            time.sleep(2)
+                        else:
+                            time.sleep(1)
+        available = False
+        while not available:
+            n_count = 0
+            for j in jobs:
+                if j.is_alive():
+                    n_count += 1
+            if n_count == 0:
+                available = True
+            else:
+                time.sleep(1)
 
         for v_new in return_list2:
             self.current_results.append(v_new)
@@ -207,11 +254,11 @@ class Calibration(object):
         best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(dimensions+1)
         best_results = best_results.to_dict(orient='index')
         if self.ideal_values['error'] < min_value_to_iterate:
-            i = initial_cases
+            it = initial_cases
             n_no_changes = 0
             while n_no_changes < max_no_improvement:
-                i += 1
-                print('Nelder-Mead iteration', int(i + 1))
+                it += 1
+                print('Nelder-Mead iteration', int(it + 1))
                 best_error = float(self.ideal_values['error'])
                 nelder_mead_result = self.nelder_mead_iteration(best_values=best_results, real_case=real_case,
                                                                 real_death=real_death, dates=dates, total=total,
@@ -225,26 +272,40 @@ class Calibration(object):
                 return_list = manager2.list()
                 cores = multiprocessing.cpu_count()-1
                 jobs = list()
-                if self.ideal_values == best_results_n[0]:
-                    for v_test in range(1, len(best_results_n)):
-                        p = multiprocessing.Process(target=self.try_new_best, args=(best_results_n[v_test], real_case,
-                                                                                    real_death, dates, return_list,
-                                                                                    total))
-                        jobs.append(p)
-                else:
-                    self.ideal_values = best_results_n[0]
-                    for v_test in range(1, 5):
-                        p = multiprocessing.Process(target=self.try_new_best, args=(best_results_n[v_test], real_case,
-                                                                                    real_death, dates, return_list,
-                                                                                    total))
-                        jobs.append(p)
-
-                for iv in self.chunks(jobs, cores):
-                    for j in iv:
-                        j.start()
-                    for j in iv:
-                        j.join()
-
+                max_to_add = len(best_results_n) if self.ideal_values == best_results_n[0] else 5
+                for v_test in range(1, max_to_add):
+                    list_to_add = self.try_new_best(best_results_n[v_test], real_case, real_death, dates, return_list,
+                                                    total)
+                    for new_point in list_to_add:
+                        p = multiprocessing.Process(target=self.calculate_point, args=new_point)
+                        if len(jobs) < cores:
+                            jobs.append(p)
+                            jobs[len(jobs)-1].start()
+                            time.sleep(2)
+                        else:
+                            available = False
+                            while not available:
+                                n_count = 0
+                                for j in range(len(jobs)):
+                                    if jobs[j].is_alive():
+                                        n_count += 1
+                                if n_count < cores:
+                                    available = True
+                                    jobs.append(p)
+                                    jobs[len(jobs) - 1].start()
+                                    time.sleep(2)
+                                else:
+                                    time.sleep(1)
+                available = False
+                while not available:
+                    n_count = 0
+                    for j in jobs:
+                        if j.is_alive():
+                            n_count += 1
+                    if n_count == 0:
+                        available = True
+                    else:
+                        time.sleep(1)
                 for v_new in return_list:
                     self.current_results.append(v_new)
                     if self.ideal_values is None:
@@ -331,141 +392,88 @@ class Calibration(object):
         np_centroid = np.array(list(centroid.values()))
         print('Considered centroid')
         print(centroid)
-        shrink = False
+        manager = multiprocessing.Manager()
+        return_list = manager.list()
+        jobs = list()
+
         reflection_point = np.maximum(np_centroid - alpha*(np_centroid-np_worst_point), 0.0)
         beta = tuple(reflection_point[0, :].tolist())
         dc = tuple(reflection_point[1, :].tolist())
         arrival = tuple(reflection_point[2, :].tolist())
         spc = float(reflection_point[3, 0])
         calculate = True
-        print('Reflection')
-        v_reflection = None
         for point in self.current_results:
             if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
                 calculate = False
-                v_reflection = point
         if calculate:
-            end_list = []
-            self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc, arrival=arrival,
-                                 symptomatic_probability=spc, dates=dates, end_list=end_list, total=total)
-            v_reflection = end_list[0]
-            self.current_results.append(v_reflection)
-            self.results.append(v_reflection)
-        if v_reflection['error'] < best_values[0]['error']:
-            print('Expansion')
-            exists = False
-            for vi in best_values:
-                if v_reflection == best_values[vi]:
-                    exists = True
-            if not exists:
-                best_values[len(best_values)] = v_reflection
-            expansion_point = np.maximum(np_centroid - gamma*(np_centroid-np_worst_point), 0.0)
-            beta = tuple(expansion_point[0, :].tolist())
-            dc = tuple(expansion_point[1, :].tolist())
-            arrival = tuple(expansion_point[2, :].tolist())
-            spc = float(expansion_point[3, 0])
-            v_expansion = None
-            calculate = True
-            for point in self.current_results:
-                if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
-                    calculate = False
-                    v_expansion = point
-            if calculate:
-                end_list = []
-                self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc, arrival=arrival,
-                                     symptomatic_probability=spc, dates=dates, end_list=end_list, total=total)
-                v_expansion = end_list[0]
-                self.current_results.append(v_expansion)
-                self.results.append(v_expansion)
-            exists = False
-            for vi in best_values:
-                if v_expansion == best_values[vi]:
-                    exists = True
-            if not exists:
-                best_values[len(best_values)] = v_expansion
-        elif v_reflection['error'] < best_values[1]['error']:
-            exists = False
-            for vi in best_values:
-                if v_reflection == best_values[vi]:
-                    exists = True
-            if not exists:
-                best_values[len(best_values)] = v_reflection
-        elif v_reflection['error'] < worst_point['error']:
-            print('Outside contraction')
-            outside_contraction_point = np.maximum(np_centroid + beta_p*(np_centroid-np_worst_point), 0.0)
-            beta = tuple(outside_contraction_point[0, :].tolist())
-            dc = tuple(outside_contraction_point[1, :].tolist())
-            arrival = tuple(outside_contraction_point[2, :].tolist())
-            spc = float(outside_contraction_point[3, 0])
-            v_outside_contraction = None
-            calculate = True
-            for point in self.current_results:
-                if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
-                    calculate = False
-                    v_outside_contraction = point
-            if calculate:
-                end_list = []
-                self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc, arrival=arrival,
-                                     symptomatic_probability=spc, dates=dates, end_list=end_list, total=total)
-                v_outside_contraction = end_list[0]
-                self.current_results.append(v_outside_contraction)
-                self.results.append(v_outside_contraction)
-            if v_outside_contraction['error'] < v_reflection['error']:
-                exists = False
-                for vi in best_values:
-                    if v_reflection == best_values[vi]:
-                        exists = True
-                if not exists:
-                    best_values[len(best_values)] = v_reflection
-                exists = False
-                for vi in best_values:
-                    if v_outside_contraction == best_values[vi]:
-                        exists = True
-                if not exists:
-                    best_values[len(best_values)] = v_outside_contraction
-            else:
-                print('Shrink')
-                shrink = True
-                shrink_list = self.calculate_shrinks(values_list=best_values, n_relevant=n_relevant,
-                                                     real_case=real_case, real_death=real_death, dates=dates,
-                                                     total=total, delta=delta)
-                for i in range(n_relevant):
-                    best_values[i + 1] = shrink_list[i]
+            p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta),
+                                                                           tuple(dc), tuple(arrival), spc, dates,
+                                                                           return_list, total))
+            jobs.append(p)
+            jobs[len(jobs)-1].start()
+        expansion_point = np.maximum(np_centroid - gamma * (np_centroid - np_worst_point), 0.0)
+        beta = tuple(expansion_point[0, :].tolist())
+        dc = tuple(expansion_point[1, :].tolist())
+        arrival = tuple(expansion_point[2, :].tolist())
+        spc = float(expansion_point[3, 0])
+        calculate = True
+        for point in self.current_results:
+            if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
+                calculate = False
+        if calculate:
+            p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta),
+                                                                           tuple(dc), tuple(arrival), spc, dates,
+                                                                           return_list, total))
+            jobs.append(p)
+            jobs[len(jobs)-1].start()
+        outside_contraction_point = np.maximum(np_centroid + beta_p * (np_centroid - np_worst_point), 0.0)
+        beta = tuple(outside_contraction_point[0, :].tolist())
+        dc = tuple(outside_contraction_point[1, :].tolist())
+        arrival = tuple(outside_contraction_point[2, :].tolist())
+        spc = float(outside_contraction_point[3, 0])
+        calculate = True
+        for point in self.current_results:
+            if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
+                calculate = False
+        if calculate:
+            p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta),
+                                                                           tuple(dc), tuple(arrival), spc, dates,
+                                                                           return_list, total))
+            jobs.append(p)
+            jobs[len(jobs)-1].start()
+        inside_contraction_point = np.maximum(np_centroid + beta_p * (np_centroid - np_worst_point), 0.0)
+        beta = tuple(inside_contraction_point[0, :].tolist())
+        dc = tuple(inside_contraction_point[1, :].tolist())
+        arrival = tuple(inside_contraction_point[2, :].tolist())
+        spc = float(inside_contraction_point[3, 0])
+        calculate = True
+        for point in self.current_results:
+            if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
+                calculate = False
+        if calculate:
+            p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta),
+                                                                           tuple(dc), tuple(arrival), spc, dates,
+                                                                           return_list, total))
+            jobs.append(p)
+            jobs[len(jobs)-1].start()
+        for j in jobs:
+            j.join()
+        shrink = True
+        for job in return_list:
+            self.current_results.append(job)
+            self.results.append(job)
+            if job['error'] < worst_point['error']:
+                shrink = False
+        if shrink:
+            print('Shrink')
+            shrink_list = self.calculate_shrinks(values_list=best_values, n_relevant=n_relevant,
+                                                 real_case=real_case, real_death=real_death, dates=dates,
+                                                 total=total, delta=delta)
+            for i in range(n_relevant):
+                best_values[i + 1] = shrink_list[i]
         else:
-            print('Inside contraction')
-            inside_contraction_point = np.maximum(np_centroid + beta_p * (np_centroid - np_worst_point), 0.0)
-            beta = tuple(inside_contraction_point[0, :].tolist())
-            dc = tuple(inside_contraction_point[1, :].tolist())
-            arrival = tuple(inside_contraction_point[2, :].tolist())
-            spc = float(inside_contraction_point[3, 0])
-            v_inside_contraction = None
-            calculate = True
-            for point in self.current_results:
-                if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
-                    calculate = False
-                    v_inside_contraction = point
-            if calculate:
-                end_list = []
-                self.calculate_point(real_case=real_case, real_death=real_death, beta=beta, dc=dc, arrival=arrival,
-                                     symptomatic_probability=spc, dates=dates, end_list=end_list, total=total)
-                v_inside_contraction = end_list[0]
-                self.current_results.append(v_inside_contraction)
-                self.results.append(v_inside_contraction)
-            if v_inside_contraction['error'] < v_reflection['error']:
-                exists = False
-                for vi in best_values:
-                    if v_inside_contraction == best_values[vi]:
-                        exists = True
-                if not exists:
-                    best_values[len(best_values)] = v_inside_contraction
-            else:
-                print('Shrink')
-                shrink = True
-                shrink_list = self.calculate_shrinks(values_list=best_values, n_relevant=n_relevant,
-                                                     real_case=real_case, real_death=real_death, dates=dates,
-                                                     total=total, delta=delta)
-                for i in range(n_relevant):
-                    best_values[i + 1] = shrink_list[i]
+            for job in return_list:
+                best_values[len(best_values)] = job
         best_values = pd.DataFrame(best_values).T.drop_duplicates(ignore_index=True)
         best_values = best_values.sort_values(by='error', ascending=True, ignore_index=True).head(n_relevant + 1)
         best_values = best_values.to_dict(orient='index')
@@ -481,7 +489,7 @@ class Calibration(object):
         cores = multiprocessing.cpu_count() - 1
         for i in range(n_relevant):
             np_point = np.array([values_list[i + 1]['beta'], values_list[i + 1]['dc'], values_list[i + 1]['arrival'],
-                                 (values_list[i + 1]['spc'] for i in range(6))])
+                                 np.ones(6) * values_list[i + 1]['spc']])
             shrink_point = np.maximum(np_point + delta * (np_point - np_best_point), 0.0)
             beta = tuple(shrink_point[0, :].tolist())
             dc = tuple(shrink_point[1, :].tolist())
@@ -490,10 +498,33 @@ class Calibration(object):
             p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta),
                                                                            tuple(dc), tuple(arrival), spc, dates,
                                                                            return_list, total))
-            jobs.append(p)
-        for i in self.chunks(jobs, cores):
-            for j in i:
-                j.start()
-            for j in i:
-                j.join()
+            if len(jobs) < cores:
+                jobs.append(p)
+                jobs[len(jobs)-1].start()
+                time.sleep(2)
+            else:
+                available = False
+                while not available:
+                    n_count = 0
+                    for j in range(len(jobs)):
+                        if jobs[j].is_alive():
+                            n_count += 1
+                    if n_count < cores:
+                        jobs.append(p)
+                        available = True
+                        jobs[len(jobs)-1].start()
+                        time.sleep(2)
+                    else:
+                        time.sleep(1)
+        available = False
+        while not available:
+            n_count = 0
+            for j in jobs:
+                if j.is_alive():
+                    n_count += 1
+            if n_count == 0:
+                available = True
+            else:
+                time.sleep(1)
+
         return return_list

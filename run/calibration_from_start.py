@@ -28,7 +28,7 @@ c_death_ant = 0.0
 n_iteration = 0
 days_deaths = {1: 62, 2: 105, 3: 47, 4: 111, 5: 58, 6: 84}
 days_cases = {1: 23, 2: 20, 3: 18, 4: 30, 5: 22, 6: 55}
-n_cases = 3*(len(c_beta_base) + len(c_death_base) + len(c_arrival_base)+1)+1
+n_cases = 5*(len(c_beta_base) + len(c_death_base) + len(c_arrival_base)+1)+1
 c_total = True
 n_changed = 0
 previous_error = [100000000000000.0]
@@ -49,19 +49,24 @@ while n_changed < 5:
                                   calibration_model.ideal_values['error']))
     print(' No changes in: ', n_changed)
     if float(calibration_model.ideal_values['error']) < float(previous_error[len(previous_error)-1]):
-        n_changed = 0
         c_beta_base = np.array(calibration_model.ideal_values['beta'])
         c_death_base = np.array(calibration_model.ideal_values['dc'])
         c_arrival_base = np.array(calibration_model.ideal_values['arrival'])
         c_spc_base = min(max(0.00000000000001, float(calibration_model.ideal_values['spc'])), 1.0)
-        c_beta_inf = c_beta_base - np.absolute(c_beta_base - c_beta_inf)
-        c_beta_sup = c_beta_base + np.absolute(c_beta_base - c_beta_sup)
-        c_death_inf = c_death_base - np.absolute(c_death_base - c_death_inf)
-        c_death_sup = c_death_base + np.absolute(c_death_base - c_death_sup)
-        c_arrival_inf = c_arrival_base - np.absolute(c_arrival_base - c_arrival_inf)
-        c_arrival_sup = c_arrival_base + np.absolute(c_arrival_base - c_arrival_sup)
-        c_spc_inf = max(c_spc_base - abs(c_spc_base - c_spc_inf), 0.00000000000001)
-        c_spc_sup = min(c_spc_base + abs(c_spc_base - c_spc_sup), 1.0)
+        radius = np.maximum(np.absolute(c_beta_base - c_beta_inf), np.absolute(c_beta_base - c_beta_sup))/2
+        c_beta_inf = np.maximum(np.minimum(c_beta_inf, c_beta_base), c_beta_base - radius)
+        c_beta_sup = np.minimum(np.maximum(c_beta_sup, c_beta_base), c_beta_base + radius)
+        radius = np.maximum(np.absolute(c_death_base - c_death_inf), np.absolute(c_death_base - c_death_sup))/2
+        c_death_inf = np.maximum(np.minimum(c_death_inf, c_death_base), c_death_base - radius)
+        c_death_sup = np.minimum(np.maximum(c_death_sup, c_death_base), c_death_base + radius)
+        radius = np.maximum(np.absolute(c_arrival_base - c_arrival_inf), np.absolute(c_arrival_base - c_arrival_sup))/2
+        c_arrival_inf = np.maximum(np.minimum(c_arrival_inf, c_arrival_base), c_arrival_base - radius)
+        c_arrival_sup = np.minimum(np.maximum(c_arrival_sup, c_arrival_base), c_arrival_base + radius)
+        radius = max(abs(c_spc_base - c_spc_inf), abs(c_spc_base - c_spc_sup))/2
+        c_spc_inf = max(min(c_spc_base, c_spc_inf), c_spc_base - radius)
+        c_spc_sup = min(max(c_spc_base, c_spc_sup), c_spc_base + radius)
+    if round(float(calibration_model.ideal_values['error']), 7) < round(float(previous_error[len(previous_error) - 1]), 7):
+        n_changed = 0
     else:
         n_changed += 1
     previous_error.append(float(calibration_model.ideal_values['error']))

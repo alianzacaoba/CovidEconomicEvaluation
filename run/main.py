@@ -151,5 +151,5 @@ while not available:
     if n_count == 0:
         available = True
     else:
-        os.time.sleep(1)
+        time.sleep(1)
 print('End process')

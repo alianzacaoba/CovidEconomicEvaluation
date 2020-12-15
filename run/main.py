@@ -1,10 +1,9 @@
 import multiprocessing
-
 from tqdm import tqdm
-
 from logic.model import Model
 import pandas as pd
 from root import DIR_INPUT
+import time
 
 
 def chunks(lv, nv):
@@ -44,32 +43,59 @@ type_paramsA['vaccine_day'] = 'BASE_VALUE'
 
 vaccine_information = pd.read_csv(DIR_INPUT + 'region_capacities.csv', sep=';', index_col=0).to_dict()
 
-c_beta_base = (0.015181261753330323, 0.014821128683311566, 0.0131325938037465, 0.014696523899962706,
-               0.013138902986450665, 0.011345074849436072)
-c_death_base = (1.9185998688640198, 0.6986535116775661, 1.1603601931643293, 1.3459781524694627, 1.203913031582318,
-                1.1724583888461928)
-c_arrival_base = (29.486905916730898, 9.668472205980201, 54.75314641851789, 14.313713580902798, 63.217938809786816,
-                  118.4026978484823)
+''' Current best results:
+beta : (0.022007606119173795, 0.017863980243733434, 0.018196130566806898, 0.018457626077325776, 0.01748616435199459, 
+0.016227115077950355)
+dc : (1.1323965306925503, 0.7125429486836731, 1.0444436705577909, 1.0455277531926157, 0.8937395613665182, 
+0.9248158502415792)
+arrival : (15.610984192361858, 7.118033263153407, 13.580052334837838, 6.872622856121195, 19.179202373513895, 
+23.821317070305813)
+spc : 0.2761426379037166
+error_cases : (0.01144914782225527, 0.04633153074628225, 0.035662564790543826, 0.01663383341316379, 
+0.044033713992227476, 0.05507748681553992)
+error_deaths : (0.027622229848766704, 0.009587082330408638, 0.012646483805184615, 0.01921871618354314, 
+0.062333297880331026, 0.07248222923337995)
+error : 0.03471753964393546
+'''
+
+c_beta_base = (0.022007606119173795, 0.017863980243733434, 0.018196130566806898, 0.018457626077325776,
+               0.01748616435199459, 0.016227115077950355)
+c_death_base = (1.1323965306925503, 0.7125429486836731, 1.0444436705577909, 1.0455277531926157, 0.8937395613665182,
+                0.9248158502415792)
+c_arrival_base = (15.610984192361858, 7.118033263153407, 13.580052334837838, 6.872622856121195, 19.179202373513895,
+                  23.821317070305813)
+spc = 0.2761426379037166
 
 manager = multiprocessing.Manager()
 return_list = manager.list()
 jobs = list()
 cores = multiprocessing.cpu_count() - 1
 p = multiprocessing.Process(target=model_ex.run, args=(type_paramsA, 'no_vac', 'no_vaccination', c_beta_base,
-                                                       c_death_base, c_arrival_base, None, None, None, None, None,
-                                                       (365 * 3), 'all', 1.0, False))
+                                                       c_death_base, c_arrival_base, spc, None, None, None, None, None,
+                                                       (365 * 3), 'csv', False))
 jobs.append(p)
+jobs[0].start()
 for pvs in priority_vaccine_scenarios:
     for pes in vaccine_effectiveness_scenarios:
-        print('Priority scenario: ', pvs, ' Effectiveness scenario: ', pes)
         c_name = 'vac_priority_' + str(pvs) + '_effectiveness_' + str(pes)
         p = multiprocessing.Process(target=model_ex.run, args=(type_paramsA, c_name, 'no_vaccination', c_beta_base,
-                                                               c_death_base, c_arrival_base,
+                                                               c_death_base, c_arrival_base, spc,
                                                                priority_vaccine_scenarios[pvs],
                                                                vaccine_information['VACCINE_CAPACITY'],
                                                                vaccine_effectiveness_scenarios[pes], vaccine_start_days,
-                                                               vaccine_end_days, (365 * 3), 'all', 1.0, False))
-        jobs.append(p)
+                                                               vaccine_end_days, (365 * 3), 'csv', False))
+        available = False
+        while not available:
+            n_count = 0
+            for j in range(len(jobs)):
+                if jobs[j].is_alive():
+                    n_count += 1
+            if n_count < cores:
+                available = True
+                jobs.append(p)
+                jobs[len(jobs) - 1].start()
+            else:
+                time.sleep(1)
 
 for pv in type_paramsA:
     type_paramsB = type_paramsA.copy()
@@ -77,30 +103,53 @@ for pv in type_paramsA:
         type_paramsB[pv] = val
         c_name = 'sensitivity_' + pv + '_' + val + '_vac_priority_no_vac'
         p = multiprocessing.Process(target=model_ex.run, args=(type_paramsB, 'no_vac', 'no_vaccination', c_beta_base,
-                                                               c_death_base, c_arrival_base, None, None, None, None,
-                                                               None,
-                                                               (365 * 3), 'all', 1.0, False))
-        jobs.append(p)
+                                                               c_death_base, c_arrival_base, spc, None, None, None,
+                                                               None, None, (365 * 3), 'csv', False))
+        available = False
+        while not available:
+            n_count = 0
+            for j in range(len(jobs)):
+                if jobs[j].is_alive():
+                    n_count += 1
+            if n_count < cores:
+                available = True
+                jobs.append(p)
+                jobs[len(jobs) - 1].start()
+            else:
+                time.sleep(1)
+
         for pvs in priority_vaccine_scenarios:
             for pes in vaccine_effectiveness_scenarios:
                 print('Priority scenario: ', pvs, ' Effectiveness scenario: ', pes)
                 c_name = 'sensitivity_' + pv + '_' + val + '_vac_priority_' + str(pvs) + '_effectiveness_' + str(pes)
                 p = multiprocessing.Process(target=model_ex.run,
-                                            args=(type_paramsB, c_name, 'no_vaccination', c_beta_base,
-                                                  c_death_base, c_arrival_base,
-                                                  priority_vaccine_scenarios[pvs],
+                                            args=(type_paramsB, c_name, 'no_vaccination', c_beta_base, c_death_base,
+                                                  c_arrival_base, spc, priority_vaccine_scenarios[pvs],
                                                   vaccine_information['VACCINE_CAPACITY'],
                                                   vaccine_effectiveness_scenarios[pes], vaccine_start_days,
-                                                  vaccine_end_days, (365 * 3), 'all', 1.0, False))
-                jobs.append(p)
+                                                  vaccine_end_days, (365 * 3), 'csv', False))
+                available = False
+                while not available:
+                    n_count = 0
+                    for j in range(len(jobs)):
+                        if jobs[j].is_alive():
+                            n_count += 1
+                    if n_count < cores:
+                        print('Priority scenario: ', pvs, ' Effectiveness scenario: ', pes)
+                        available = True
+                        jobs.append(p)
+                        jobs[len(jobs) - 1].start()
+                    else:
+                        time.sleep(1)
 
-        c_name = 'vac_priority_sensitivity_' + pv + '_' + val
-        model_ex.run(type_params=type_paramsB, name=c_name, run_type='no_vaccination', beta=c_beta_base,
-                     death_coefficient=c_death_base, arrival_coefficient=c_arrival_base, sim_length=365 * 3,
-                     export_type='xlsx')
-
-for i in tqdm(chunks(jobs, cores)):
-    for j in i:
-        j.start()
-    for j in i:
-        j.join()
+available = False
+while not available:
+    n_count = 0
+    for j in range(len(jobs)):
+        if jobs[j].is_alive():
+            n_count += 1
+    if n_count == 0:
+        available = True
+    else:
+        os.time.sleep(1)
+print('End process')

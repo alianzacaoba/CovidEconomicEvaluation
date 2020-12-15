@@ -34,40 +34,35 @@ type_paramsA['cost'] = 'BASE_VALUE'
 type_paramsA['vaccine_day'] = 'BASE_VALUE'
 
 vaccine_information = pd.read_csv(DIR_INPUT + 'region_capacities.csv', sep=';', index_col=0).to_dict()
-c_beta_base = (0.023572152155186078, 0.01769950655220088, 0.018519129301769154, 0.016885653990396418,
-               0.019242207702252524, 0.018371376307632463)
-c_death_base = (1.1963156938281962, 0.6502100996039765, 1.081336086898889, 1.2182665596973046, 0.808702873981918,
-                0.8452165571388334)
-c_arrival_base = (16.0697388326682, 14.816066973348956, 8.958040652870444, 28.976417785691453, 12.803199978893517,
-                  15.008478319271791)
-''' beta : (0.023572152155186078, 0.01769950655220088, 0.018519129301769154, 0.016885653990396418, 0.019242207702252524, 
-0.018371376307632463)
-dc : (1.1963156938281962, 0.6502100996039765, 1.081336086898889, 1.2182665596973046, 0.808702873981918, 
-0.8452165571388334)
-arrival : (16.0697388326682, 14.816066973348956, 8.958040652870444, 28.976417785691453, 12.803199978893517, 
-15.008478319271791)
-spc : 0.22806022589268016
-error_cases : (0.030731576927313008, 0.13487872924890876, 0.08983902208839513, 0.09503011221461172, 0.04795620001158757, 
-0.0948414431119049)
-error_deaths : (0.008303319541706095, 0.05445524250758637, 0.045647159114592474, 0.026211759463199154, 
-0.03972596211634231, 0.05041162499841424)
-error : 0.07475390238209573
+c_beta_base = (0.022007606119173795, 0.017863980243733434, 0.018196130566806898, 0.018457626077325776, 0.01748616435199459, 0.016227115077950355)
+c_death_base = (1.1323965306925503, 0.7125429486836731, 1.0444436705577909, 1.0455277531926157, 0.8937395613665182, 0.9248158502415792)
+c_arrival_base = (15.610984192361858, 7.118033263153407, 13.580052334837838, 6.872622856121195, 19.179202373513895, 23.821317070305813)
+spc = 0.2761426379037166
+''' Current best results:
+beta : (0.022007606119173795, 0.017863980243733434, 0.018196130566806898, 0.018457626077325776, 0.01748616435199459, 0.016227115077950355)
+dc : (1.1323965306925503, 0.7125429486836731, 1.0444436705577909, 1.0455277531926157, 0.8937395613665182, 0.9248158502415792)
+arrival : (15.610984192361858, 7.118033263153407, 13.580052334837838, 6.872622856121195, 19.179202373513895, 23.821317070305813)
+spc : 0.2761426379037166
+error_cases : (0.01144914782225527, 0.04633153074628225, 0.035662564790543826, 0.01663383341316379, 0.044033713992227476, 0.05507748681553992)
+error_deaths : (0.027622229848766704, 0.009587082330408638, 0.012646483805184615, 0.01921871618354314, 0.062333297880331026, 0.07248222923337995)
+error : 0.03471753964393546
 '''
 
 c_name = 'no_vac'
 model_ex.run(type_params=type_paramsA, name=c_name, run_type='no_vaccination', beta=c_beta_base,
-             death_coefficient=c_death_base, arrival_coefficient=c_arrival_base, sim_length=365 * 3, export_type='xlsx')
+             death_coefficient=c_death_base, symptomatic_coefficient=spc,  arrival_coefficient=c_arrival_base,
+             sim_length=365 * 3, export_type=['all'])
 
 for pvs in priority_vaccine_scenarios:
     for pes in vaccine_effectiveness_scenarios:
         print('Priority scenario: ', pvs, ' Effectiveness scenario: ', pes)
         c_name = 'vac_priority_' + str(pvs) + '_effectiveness_' + str(pes)
         model_ex.run(type_params=type_paramsA, name=c_name, run_type='vaccination', beta=c_beta_base,
-                     death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
+                     death_coefficient=c_death_base, arrival_coefficient=c_arrival_base, symptomatic_coefficient=spc,
                      vaccine_priority=priority_vaccine_scenarios[pvs],
                      vaccine_capacities=vaccine_information['VACCINE_CAPACITY'],
                      vaccine_effectiveness=vaccine_effectiveness_scenarios[pes], vaccine_start_day=vaccine_start_days,
-                     vaccine_end_day=vaccine_end_days, sim_length=365 * 3, export_type='xlsx')
+                     vaccine_end_day=vaccine_end_days, sim_length=365 * 3, export_type=['all'])
 
 for pv in type_paramsA:
     type_paramsB = type_paramsA.copy()
@@ -79,13 +74,13 @@ for pv in type_paramsA:
                 c_name = 'vac_priority_' + str(pvs) + '_effectiveness_' + str(pes) + '_sensitivity_' + pv + '_' + val
                 model_ex.run(type_params=type_paramsB, name=c_name, run_type='vaccination', beta=c_beta_base,
                              death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
-                             vaccine_priority=priority_vaccine_scenarios[pvs],
+                             symptomatic_coefficient=spc, vaccine_priority=priority_vaccine_scenarios[pvs],
                              vaccine_capacities=vaccine_information['VACCINE_CAPACITY'],
                              vaccine_effectiveness=vaccine_effectiveness_scenarios[pes],
                              vaccine_start_day=vaccine_start_days, vaccine_end_day=vaccine_end_days, sim_length=365 * 3,
-                             export_type='xlsx')
+                             export_type=['all'])
 
         c_name = 'vac_priority_sensitivity_' + pv + '_' + val
         model_ex.run(type_params=type_paramsB, name=c_name, run_type='no_vaccination', beta=c_beta_base,
-                     death_coefficient=c_death_base, arrival_coefficient=c_arrival_base, sim_length=365 * 3,
-                     export_type='xlsx')
+                     death_coefficient=c_death_base, arrival_coefficient=c_arrival_base, symptomatic_coefficient=spc,
+                     sim_length=365 * 3, export_type=['all'])

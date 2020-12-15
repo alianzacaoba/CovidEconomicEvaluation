@@ -54,14 +54,19 @@ while n_changed < 5:
         c_death_base = np.array(calibration_model.ideal_values['dc'])
         c_arrival_base = np.array(calibration_model.ideal_values['arrival'])
         c_spc_base = min(max(0.00000000000001, float(calibration_model.ideal_values['spc'])), 1.0)
-        c_beta_inf = c_beta_base - np.absolute(c_beta_base - c_beta_inf)
-        c_beta_sup = c_beta_base + np.absolute(c_beta_base - c_beta_sup)
-        c_death_inf = c_death_base - np.absolute(c_death_base - c_death_inf)
-        c_death_sup = c_death_base + np.absolute(c_death_base - c_death_sup)
-        c_arrival_inf = c_arrival_base - np.absolute(c_arrival_base - c_arrival_inf)
-        c_arrival_sup = c_arrival_base + np.absolute(c_arrival_base - c_arrival_sup)
-        c_spc_inf = max(c_spc_base - abs(c_spc_base - c_spc_inf), 0.00000000000001)
-        c_spc_sup = min(c_spc_base + abs(c_spc_base - c_spc_sup), 1.0)
+        radius = np.maximum(np.absolute(c_beta_base - c_beta_inf), np.absolute(c_beta_base - c_beta_sup)) / 2
+        c_beta_inf = np.maximum(np.minimum(c_beta_inf, c_beta_base), c_beta_base - radius)
+        c_beta_sup = np.minimum(np.maximum(c_beta_sup, c_beta_base), c_beta_base + radius)
+        radius = np.maximum(np.absolute(c_death_base - c_death_inf), np.absolute(c_death_base - c_death_sup)) / 2
+        c_death_inf = np.maximum(np.minimum(c_death_inf, c_death_base), c_death_base - radius)
+        c_death_sup = np.minimum(np.maximum(c_death_sup, c_death_base), c_death_base + radius)
+        radius = np.maximum(np.absolute(c_arrival_base - c_arrival_inf),
+                            np.absolute(c_arrival_base - c_arrival_sup)) / 2
+        c_arrival_inf = np.maximum(np.minimum(c_arrival_inf, c_arrival_base), c_arrival_base - radius)
+        c_arrival_sup = np.minimum(np.maximum(c_arrival_sup, c_arrival_base), c_arrival_base + radius)
+        radius = max(abs(c_spc_base - c_spc_inf), abs(c_spc_base - c_spc_sup)) / 2
+        c_spc_inf = max(min(c_spc_base, c_spc_inf), c_spc_base - radius)
+        c_spc_sup = min(max(c_spc_base, c_spc_sup), c_spc_base + radius)
     else:
         n_changed += 1
     previous_error.append(float(calibration_model.ideal_values['error']))

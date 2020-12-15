@@ -410,7 +410,7 @@ class Calibration(object):
                           dates: dict, total: bool = True, delta: float = 0.5):
         np_best_point = np.array([values_list[0]['beta'], values_list[0]['dc'], values_list[0]['arrival'],
                                   np.ones(6) * values_list[0]['spc']])
-        results = [np_best_point]
+        results = values_list.copy()
         for i in range(n_relevant):
             np_point = np.array([values_list[i + 1]['beta'], values_list[i + 1]['dc'], values_list[i + 1]['arrival'],
                                  np.ones(6) * values_list[i + 1]['spc']])
@@ -423,9 +423,9 @@ class Calibration(object):
             for point in self.current_results:
                 if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
                     calculate = False
-                    results.append(point)
+                    results[i+1] = point
             if calculate:
-                results.append(self.calculate_point(real_case, real_death, tuple(beta), tuple(dc), tuple(arrival), spc,
-                                                    dates, total))
+                results[i+1] = self.calculate_point(real_case, real_death, tuple(beta), tuple(dc), tuple(arrival), spc,
+                                                    dates, total)
 
         return results

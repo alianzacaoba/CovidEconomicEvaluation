@@ -7,6 +7,7 @@ import warnings
 import json
 from pyexcelerate import Workbook
 from root import DIR_INPUT, DIR_OUTPUT
+import datetime as dt
 
 warnings.simplefilter('error')
 
@@ -125,7 +126,7 @@ class Model(object):
             beta: tuple = (0.5, 0.5, 0.5, 0.5, 0.5, 0.5), death_coefficient: tuple = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
             arrival_coefficient: tuple = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0), vaccine_priority: list = None,
             vaccine_capacities: dict = None, vaccine_effectiveness: dict = None, vaccine_start_day: dict = None,
-            vaccine_end_day: dict = None, sim_length: int = 265, export_type: str = 'all',
+            vaccine_end_day: dict = None, sim_length: int = 265, export_type: list = ['all'],
             symptomatic_coefficient: float = 1.0, use_tqdm: bool = True):
         # run_type:
         #   1) 'calibration': for calibration purposes, states f1,f2,v1,v2,e_f,a_f do not exist
@@ -688,6 +689,12 @@ class Model(object):
                                 pop_dict_h[comp.name] = comp.values
                             cur_pop_pandas = pd.DataFrame.from_dict(pop_dict_h).reset_index(drop=False).rename(
                                 columns={'index': 'day'})
+                            for comp in population[gv][ev][wv][hv]:
+                                dict_comp = dict()
+                                for i in range(len(comp.values)):
+                                    date = dt.datetime(year=2020, month=2, day=21)+dt.timedelta(days=i)
+                                    dict_comp[str(date.year)+'-'+str(date.month)+'-'+str(date.day)] = comp.values[i]
+                                pop_dict_h[comp.name] = dict_comp
                             cur_pop_pandas['Health'] = hv
                             if len(pop_pandas_w) > 0:
                                 pop_pandas_w = pd.concat([pop_pandas_w, cur_pop_pandas], ignore_index=True)
@@ -716,32 +723,34 @@ class Model(object):
                     pop_pandas = pop_pandas_g.copy()
                 del pop_pandas_g
                 pop_dict[gv] = pop_dict_g
+            pop_pandas['Date'] = pop_pandas['day'].apply(lambda x: dt.datetime(year=2020, month=2, day=21) +
+                                                                   dt.timedelta(days=x))
             print('Begin exportation')
-            if export_type == 'all' or export_type == 'json':
+            if 'all' in export_type or 'json' in export_type:
                 print('Begin JSon exportation')
                 with open(DIR_OUTPUT + 'result_' + name + '.json', 'w') as fp:
                     json.dump(pop_dict, fp)
                 print('JSon ', DIR_OUTPUT + 'result_' + name + '.json', 'exported')
-            if export_type == 'all' or export_type == 'csv' or export_type == 'xlsx':
-                pop_pandas = pop_pandas.set_index(['day', 'Department', 'Health', 'Work', 'Age']).reset_index(
+            if 'all' in export_type or 'csv' in export_type or 'xlsx' in export_type:
+                pop_pandas = pop_pandas.set_index(['Date', 'day', 'Department', 'Health', 'Work', 'Age']).reset_index(
                     drop=False)
-                if export_type == 'all' or export_type == 'csv':
+                if 'all' in export_type or 'csv' in export_type:
                     print('Begin CSV exportation')
                     pop_pandas.to_csv(DIR_OUTPUT + 'result_' + name + '.csv', index=False)
                     print('CSV ', DIR_OUTPUT + 'result_' + name + '.csv', 'exported')
-                if export_type == 'all' or export_type == 'xlsx':
+                if 'all' in export_type or 'xlsx' in export_type:
                     print('Begin excel exportation')
                     wb = Workbook()
                     iterator = tqdm(departments) if use_tqdm else departments
                     for gv in iterator:
                         pop_pandas_current = pop_pandas[pop_pandas['Department'] == gv].drop(columns='Department')
-                        pop_pandas_current = pop_pandas_current.set_index(['day', 'Health', 'Work', 'Age']).reset_index(
-                            drop=False)
+                        pop_pandas_current = pop_pandas_current.set_index(['Date', 'day', 'Health', 'Work', 'Age']).\
+                            reset_index(drop=False)
                         values = [pop_pandas_current.columns] + list(pop_pandas_current.values)
                         name_gv = gv if len(gv) < 31 else gv[:15]
                         wb.new_sheet(name_gv, data=values)
                     pop_pandas.drop(columns='Department', inplace=True)
-                    pop_pandas_current = pop_pandas.groupby(['day', 'Health', 'Work', 'Age']).sum().reset_index(
+                    pop_pandas_current = pop_pandas.groupby(['Date', 'day', 'Health', 'Work', 'Age']).sum().reset_index(
                         drop=False)
                     values = [pop_pandas_current.columns] + list(pop_pandas_current.values)
                     print('Excel exportation country results')

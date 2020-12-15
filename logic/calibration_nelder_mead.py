@@ -158,6 +158,7 @@ class Calibration(object):
                                                                        return_list, total))
         jobs.append(p)
         jobs[0].start()
+
         for i in range(initial_cases):
             beta = [x_beta[0][i], x_beta[1][i], x_beta[2][i], x_beta[3][i], x_beta[4][i], x_beta[5][i]]
             dc = [x_d_c[0][i], x_d_c[1][i], x_d_c[2][i], x_d_c[3][i], x_d_c[4][i], x_d_c[5][i]]
@@ -180,6 +181,7 @@ class Calibration(object):
                         available = True
                         jobs.append(p)
                         jobs[len(jobs)-1].start()
+                        time.sleep(1)
                     else:
                         time.sleep(1)
 

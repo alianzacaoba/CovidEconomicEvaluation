@@ -11,6 +11,20 @@ from root import DIR_INPUT, DIR_OUTPUT
 warnings.simplefilter('error')
 
 
+beta_f = (0.022007606119173795, 0.017863980243733434, 0.018196130566806898, 0.018457626077325776, 0.01748616435199459,
+          0.016227115077950355)
+dc_f = (1.1323965306925503, 0.7125429486836731, 1.0444436705577909, 1.0455277531926157, 0.8937395613665182,
+        0.9248158502415792)
+arrival_f = (15.610984192361858, 7.118033263153407, 13.580052334837838, 6.872622856121195, 19.179202373513895,
+             23.821317070305813)
+spc_f = 0.2761426379037166
+# error_cases : (0.01144914782225527, 0.04633153074628225, 0.035662564790543826, 0.01663383341316379,
+# 0.044033713992227476, 0.05507748681553992)
+# error_deaths : (0.027622229848766704, 0.009587082330408638, 0.012646483805184615, 0.01921871618354314,
+# 0.062333297880331026, 0.07248222923337995)
+# error : 0.03471753964393546
+
+
 def calculate_vaccine_assignments(department_population: dict, day: int, vaccine_priority: list,
                                   vaccine_capacity: float, candidates_indexes: list):
     remaining_vaccines = vaccine_capacity
@@ -122,17 +136,16 @@ class Model(object):
             del current_param
 
     def run(self, type_params: dict, name: str = 'Iteration', run_type: str = 'vaccination',
-            beta: tuple = (0.5, 0.5, 0.5, 0.5, 0.5, 0.5), death_coefficient: tuple = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0),
-            arrival_coefficient: tuple = (1.0, 1.0, 1.0, 1.0, 1.0, 1.0), vaccine_priority: list = None,
-            vaccine_capacities: dict = None, vaccine_effectiveness: dict = None, vaccine_start_day: dict = None,
-            vaccine_end_day: dict = None, sim_length: int = 265, export_type: str = 'all',
-            symptomatic_coefficient: float = 1.0, use_tqdm: bool = True):
+            beta: tuple = beta_f, death_coefficient: tuple = dc_f, arrival_coefficient: tuple = arrival_f,
+            symptomatic_coefficient: float = spc_f, vaccine_priority: list = None, vaccine_capacities: dict = None,
+            vaccine_effectiveness: dict = None, vaccine_start_day: dict = None, vaccine_end_day: dict = None,
+            sim_length: int = 365*3, export_type: str = 'csv', use_tqdm: bool = False):
+
         # run_type:
         #   1) 'calibration': for calibration purposes, states f1,f2,v1,v2,e_f,a_f do not exist
         #   2) 'vaccination': model with vaccine states
         #   3) 'non-vaccination': model
         # SU, E, A, R_A, P, Sy, C, H, I, R, D, Cases
-
         # export_type = {'all', 'json', 'csv', 'xlsx'}
         population = dict()
         departments = self.departments

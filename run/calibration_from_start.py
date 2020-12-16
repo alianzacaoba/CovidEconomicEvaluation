@@ -40,7 +40,7 @@ while n_changed < 5:
                                       arrival_range=[c_arrival_inf, c_arrival_base, c_arrival_sup],
                                       symptomatic_probability_range=[c_spc_inf, c_spc_base, c_spc_sup],
                                       dates={'days_cases': days_cases, 'days_deaths': days_deaths}, total=c_total,
-                                      iteration=n_iteration, max_no_improvement=50,
+                                      iteration=n_iteration, max_no_improvement=100,
                                       min_value_to_iterate=100000, error_precision=7)
     print(' End of cycle: ', n_iteration)
     print(' New error:', calibration_model.ideal_values['error'])
@@ -54,18 +54,18 @@ while n_changed < 5:
         c_arrival_base = np.array(calibration_model.ideal_values['arrival'])
         c_spc_base = min(max(0.00000000000001, float(calibration_model.ideal_values['spc'])), 1.0)
         radius = np.maximum(np.absolute(c_beta_base - c_beta_inf), np.absolute(c_beta_base - c_beta_sup))/2
-        c_beta_inf = np.maximum(np.minimum(c_beta_inf, c_beta_base), c_beta_base - radius)
-        c_beta_sup = np.minimum(np.maximum(c_beta_sup, c_beta_base), c_beta_base + radius)
+        c_beta_inf = np.maximum(c_beta_base - radius, np.zeros(6))
+        c_beta_sup = np.minimum(c_beta_base + radius, np.ones(6))
         radius = np.maximum(np.absolute(c_death_base - c_death_inf), np.absolute(c_death_base - c_death_sup))/2
-        c_death_inf = np.maximum(np.minimum(c_death_inf, c_death_base), c_death_base - radius)
-        c_death_sup = np.minimum(np.maximum(c_death_sup, c_death_base), c_death_base + radius)
+        c_death_inf = np.maximum(c_death_base - radius, np.zeros(6))
+        c_death_sup = np.minimum(c_death_base + radius, np.ones(6))
         radius = np.maximum(np.absolute(c_arrival_base - c_arrival_inf), np.absolute(c_arrival_base - c_arrival_sup))/2
-        c_arrival_inf = np.maximum(np.minimum(c_arrival_inf, c_arrival_base), c_arrival_base - radius)
-        c_arrival_sup = np.minimum(np.maximum(c_arrival_sup, c_arrival_base), c_arrival_base + radius)
+        c_arrival_inf = np.maximum(c_arrival_base - radius, np.zeros(6))
+        c_arrival_sup = c_arrival_base + radius
         radius = max(abs(c_spc_base - c_spc_inf), abs(c_spc_base - c_spc_sup))/2
-        c_spc_inf = max(min(c_spc_base, c_spc_inf), c_spc_base - radius)
-        c_spc_sup = min(max(c_spc_base, c_spc_sup), c_spc_base + radius)
-    if round(float(calibration_model.ideal_values['error']), 7) < round(float(previous_error[len(previous_error) - 1]), 7):
+        c_spc_inf = max(c_spc_base - radius, 0.00000000000001)
+        c_spc_sup = min(c_spc_base + radius, 1.0)
+    if round(float(calibration_model.ideal_values['error']), 8) < round(float(previous_error[len(previous_error) - 1]), 8):
         n_changed = 0
     else:
         n_changed += 1

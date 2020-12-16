@@ -184,69 +184,40 @@ class Calibration(object):
                         time.sleep(1)
                     else:
                         time.sleep(1)
-
-        available = False
-        while not available:
-            n_count = 0
-            for j in jobs:
-                if j.is_alive():
-                    n_count += 1
-            if n_count == 0:
-                available = True
-            else:
-                time.sleep(1)
-
-        manager2 = multiprocessing.Manager()
-        return_list2 = manager2.list()
-        jobs = list()
-        for v_new in return_list:
-            self.current_results.append(v_new)
-            if self.ideal_values is None:
-                self.ideal_values = v_new
-            elif v_new['error'] < self.ideal_values['error']:
-                self.ideal_values = v_new
-            if v_new not in self.results:
-                self.results.append(v_new)
-            list_to_add = self.try_new_best(v_new, real_case, real_death, dates, return_list2, total)
-            for new_point in list_to_add:
-                p = multiprocessing.Process(target=self.calculate_point, args=new_point)
-                if len(jobs) < cores:
-                    jobs.append(p)
-                    jobs[len(jobs)-1].start()
-                    time.sleep(2)
-                else:
-                    available = False
-                    while not available:
-                        n_count = 0
-                        for j in range(len(jobs)):
-                            if jobs[j].is_alive():
-                                n_count += 1
-                        if n_count < cores:
-                            available = True
-                            jobs.append(p)
-                            jobs[len(jobs)-1].start()
-                            time.sleep(2)
-                        else:
-                            time.sleep(1)
-        available = False
-        while not available:
-            n_count = 0
-            for j in jobs:
-                if j.is_alive():
-                    n_count += 1
-            if n_count == 0:
-                available = True
-            else:
-                time.sleep(1)
-
-        for v_new in return_list2:
-            self.current_results.append(v_new)
-            if self.ideal_values is None:
-                self.ideal_values = v_new
-            elif v_new['error'] < self.ideal_values['error']:
-                self.ideal_values = v_new
-            if v_new not in self.results:
-                self.results.append(v_new)
+        block = 0
+        for sets in self.chunks(jobs, cores):
+            for job in sets:
+                job.start()
+            for job in sets:
+                job.join()
+            for solution in range(block*cores, (block+1)*cores-1):
+                jobs2 = list()
+                manager2 = multiprocessing.Manager()
+                return_list2 = manager2.list()
+                v_new = return_list[solution]
+                self.current_results.append(v_new)
+                if self.ideal_values is None:
+                    self.ideal_values = v_new
+                elif v_new['error'] < self.ideal_values['error']:
+                    self.ideal_values = v_new
+                if v_new not in self.results:
+                    self.results.append(v_new)
+                list_to_add = self.try_new_best(v_new, real_case, real_death, dates, return_list2, total)
+                for new_point in list_to_add:
+                    p = multiprocessing.Process(target=self.calculate_point, args=new_point)
+                    jobs2.append(p)
+                for job in jobs2:
+                    job.start()
+                for job in jobs2:
+                    job.join()
+                for v_new in return_list2:
+                    self.current_results.append(v_new)
+                    if self.ideal_values is None:
+                        self.ideal_values = v_new
+                    elif v_new['error'] < self.ideal_values['error']:
+                        self.ideal_values = v_new
+                    if v_new not in self.results:
+                        self.results.append(v_new)
 
         print('Current best results:')
         for iv in self.ideal_values:
@@ -270,52 +241,28 @@ class Calibration(object):
                     if best_results_n[vi] not in self.current_results:
                         self.current_results.append(best_results_n[vi])
 
-                manager2 = multiprocessing.Manager()
-                return_list = manager2.list()
-                cores = multiprocessing.cpu_count()-1
-                jobs = list()
                 max_to_add = len(best_results_n) if self.ideal_values == best_results_n[0] else 5
                 for v_test in range(1, max_to_add):
+                    jobs2 = list()
+                    manager2 = multiprocessing.Manager()
+                    return_list = manager2.list()
                     list_to_add = self.try_new_best(best_results_n[v_test], real_case, real_death, dates, return_list,
                                                     total)
                     for new_point in list_to_add:
                         p = multiprocessing.Process(target=self.calculate_point, args=new_point)
-                        if len(jobs) < cores:
-                            jobs.append(p)
-                            jobs[len(jobs)-1].start()
-                            time.sleep(2)
-                        else:
-                            available = False
-                            while not available:
-                                n_count = 0
-                                for j in range(len(jobs)):
-                                    if jobs[j].is_alive():
-                                        n_count += 1
-                                if n_count < cores:
-                                    available = True
-                                    jobs.append(p)
-                                    jobs[len(jobs) - 1].start()
-                                    time.sleep(2)
-                                else:
-                                    time.sleep(1)
-                available = False
-                while not available:
-                    n_count = 0
-                    for j in jobs:
-                        if j.is_alive():
-                            n_count += 1
-                    if n_count == 0:
-                        available = True
-                    else:
-                        time.sleep(1)
-                for v_new in return_list:
-                    self.current_results.append(v_new)
-                    if self.ideal_values is None:
-                        self.ideal_values = v_new
-                    elif v_new['error'] < self.ideal_values['error']:
-                        self.ideal_values = v_new
-                    if v_new not in self.results:
-                        self.results.append(v_new)
+                        jobs2.append(p)
+                    for job in jobs2:
+                        job.start()
+                    for job in jobs2:
+                        job.join()
+                    for v_new in return_list2:
+                        self.current_results.append(v_new)
+                        if self.ideal_values is None:
+                            self.ideal_values = v_new
+                        elif v_new['error'] < self.ideal_values['error']:
+                            self.ideal_values = v_new
+                        if v_new not in self.results:
+                            self.results.append(v_new)
 
                 best_results = pd.DataFrame(self.current_results).drop_duplicates(ignore_index=True)
                 best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(

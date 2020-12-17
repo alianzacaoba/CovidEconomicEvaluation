@@ -157,8 +157,6 @@ class Calibration(object):
                                                                        tuple(arrival), symptomatic_probability, dates,
                                                                        return_list, total))
         jobs.append(p)
-        jobs[0].start()
-
         for i in range(initial_cases):
             beta = [x_beta[0][i], x_beta[1][i], x_beta[2][i], x_beta[3][i], x_beta[4][i], x_beta[5][i]]
             dc = [x_d_c[0][i], x_d_c[1][i], x_d_c[2][i], x_d_c[3][i], x_d_c[4][i], x_d_c[5][i]]
@@ -167,30 +165,14 @@ class Calibration(object):
             p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta), tuple(dc),
                                                                            tuple(arrival), x_symptomatic[i], dates,
                                                                            return_list, total))
-            if len(jobs) < cores:
-                jobs.append(p)
-                jobs[len(jobs)-1].start()
-            else:
-                available = False
-                while not available:
-                    n_count = 0
-                    for j in range(len(jobs)):
-                        if jobs[j].is_alive():
-                            n_count += 1
-                    if n_count < cores:
-                        available = True
-                        jobs.append(p)
-                        jobs[len(jobs)-1].start()
-                        time.sleep(1)
-                    else:
-                        time.sleep(1)
+            jobs.append(p)
         block = 0
         for sets in self.chunks(jobs, cores):
             for job in sets:
                 job.start()
             for job in sets:
                 job.join()
-            for solution in range(block*cores, (block+1)*cores-1):
+            for solution in range(max(1, block*cores), min((block+1)*cores-1, len(return_list))):
                 jobs2 = list()
                 manager2 = multiprocessing.Manager()
                 return_list2 = manager2.list()
@@ -218,6 +200,7 @@ class Calibration(object):
                         self.ideal_values = v_new
                     if v_new not in self.results:
                         self.results.append(v_new)
+                block += 1
 
         print('Current best results:')
         for iv in self.ideal_values:
@@ -251,11 +234,12 @@ class Calibration(object):
                     for new_point in list_to_add:
                         p = multiprocessing.Process(target=self.calculate_point, args=new_point)
                         jobs2.append(p)
-                    for job in jobs2:
-                        job.start()
-                    for job in jobs2:
-                        job.join()
-                    for v_new in return_list2:
+                    for sets in self.chunks(jobs2, cores):
+                        for job in sets:
+                            job.start()
+                        for job in sets:
+                            job.join()
+                    for v_new in return_list:
                         self.current_results.append(v_new)
                         if self.ideal_values is None:
                             self.ideal_values = v_new

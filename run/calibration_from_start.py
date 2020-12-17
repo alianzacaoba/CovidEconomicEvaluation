@@ -20,7 +20,7 @@ c_arrival_inf = np.ones(6)*1.0
 c_arrival_base = np.ones(6)*15
 c_arrival_sup = np.ones(6)*30
 c_spc_inf = 0
-c_spc_base = 0.8
+c_spc_base = 0.3
 c_spc_sup = 1
 calibration_model = Calibration()
 c_beta_ant = 0.0
@@ -58,7 +58,7 @@ while n_changed < 5:
         c_beta_sup = np.minimum(c_beta_base + radius, np.ones(6))
         radius = np.maximum(np.absolute(c_death_base - c_death_inf), np.absolute(c_death_base - c_death_sup))/2
         c_death_inf = np.maximum(c_death_base - radius, np.zeros(6))
-        c_death_sup = np.minimum(c_death_base + radius, np.ones(6))
+        c_death_sup = c_death_base + radius
         radius = np.maximum(np.absolute(c_arrival_base - c_arrival_inf), np.absolute(c_arrival_base - c_arrival_sup))/2
         c_arrival_inf = np.maximum(c_arrival_base - radius, np.zeros(6))
         c_arrival_sup = c_arrival_base + radius

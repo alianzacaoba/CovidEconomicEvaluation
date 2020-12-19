@@ -72,6 +72,7 @@ class Calibration(object):
         dc = list()
         arrival = list()
         changed = False
+        number = min(2, multiprocessing.cpu_count())
         for reg in range(6):
             if new_point['error_cases'][reg] < self.ideal_values['error_cases'][reg]:
                 beta.append(new_point['beta'][reg])
@@ -94,24 +95,19 @@ class Calibration(object):
             beta = tuple(beta)
             dc = tuple(dc)
             arrival = tuple(arrival)
-            orig_spc = False
-            new_spc = False
             points = list()
-            for point in self.current_results:
-                if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] ==\
-                        self.ideal_values['spc']:
-                    orig_spc = True
-                if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] ==\
-                        new_point['spc']:
-                    new_spc = True
-            if not orig_spc:
-                points.append((real_case, real_death, beta, dc, arrival, self.ideal_values['spc'], dates, result_list,
-                               total))
-            if not new_spc:
-                points.append((real_case, real_death, beta, dc, arrival,  new_point['spc'], dates, result_list, total))
-            if not orig_spc or not new_spc:
-                points.append((real_case, real_death, beta, dc, arrival, (new_point['spc']+self.ideal_values['spc'])/2,
-                               dates, result_list, total))
+            min_val = min(self.ideal_values['spc'], new_point['spc'])
+            max_val = max(self.ideal_values['spc'], new_point['spc'])
+            dif = (max_val-min_val)/(number-1)
+            for val in range(number):
+                exists = False
+                current_spc = min_val+dif*val
+                for point in self.current_results:
+                    if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] ==\
+                            current_spc:
+                        exists = True
+                if not exists:
+                    points.append((real_case, real_death, beta, dc, arrival, current_spc, dates, result_list, total))
             return points
         return []
 
@@ -395,7 +391,7 @@ class Calibration(object):
         for job in return_list:
             self.current_results.append(job)
             self.results.append(job)
-            if job['error'] < worst_point['error']:
+            if job['error'] < best_values[n_relevant-1]['error']:
                 shrink = False
         if shrink:
             print('Shrink')

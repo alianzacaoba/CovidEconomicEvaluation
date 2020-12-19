@@ -23,8 +23,8 @@ class Calibration(object):
             self.type_params[pv[0]] = 'BASE_VALUE'
         self.type_params['daly'] = 'BASE_VALUE'
         self.type_params['cost'] = 'BASE_VALUE'
-        self.real_cases = pd.read_csv(DIR_INPUT + 'real_cases.csv', sep=';')
-        self.real_deaths = pd.read_csv(DIR_INPUT + 'death_cases.csv', sep=';')
+        self.real_cases = pd.read_csv(DIR_INPUT + 'real_cases.csv')
+        self.real_deaths = pd.read_csv(DIR_INPUT + 'death_cases.csv')
         self.max_day = int(self.real_cases.SYM_DAY.max())
 
     @staticmethod

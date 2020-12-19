@@ -91,6 +91,7 @@ for pvs in priority_vaccine_scenarios:
                 if jobs[j].is_alive():
                     n_count += 1
             if n_count < cores:
+                print(c_name)
                 available = True
                 jobs.append(p)
                 jobs[len(jobs) - 1].start()
@@ -102,7 +103,7 @@ for pv in type_paramsA:
     for val in ['INF_VALUE', 'MAX_VALUE']:
         type_paramsB[pv] = val
         c_name = 'sensitivity_' + pv + '_' + val + '_vac_priority_no_vac'
-        p = multiprocessing.Process(target=model_ex.run, args=(type_paramsB, 'no_vac', 'no_vaccination', c_beta_base,
+        p = multiprocessing.Process(target=model_ex.run, args=(type_paramsB, c_name, 'no_vaccination', c_beta_base,
                                                                c_death_base, c_arrival_base, spc, None, None, None,
                                                                None, None, (365 * 3), 'csv', False))
         available = False
@@ -112,6 +113,7 @@ for pv in type_paramsA:
                 if jobs[j].is_alive():
                     n_count += 1
             if n_count < cores:
+                print(c_name)
                 available = True
                 jobs.append(p)
                 jobs[len(jobs) - 1].start()
@@ -120,7 +122,6 @@ for pv in type_paramsA:
 
         for pvs in priority_vaccine_scenarios:
             for pes in vaccine_effectiveness_scenarios:
-                print('Priority scenario: ', pvs, ' Effectiveness scenario: ', pes)
                 c_name = 'sensitivity_' + pv + '_' + val + '_vac_priority_' + str(pvs) + '_effectiveness_' + str(pes)
                 p = multiprocessing.Process(target=model_ex.run,
                                             args=(type_paramsB, c_name, 'no_vaccination', c_beta_base, c_death_base,
@@ -135,7 +136,7 @@ for pv in type_paramsA:
                         if jobs[j].is_alive():
                             n_count += 1
                     if n_count < cores:
-                        print('Priority scenario: ', pvs, ' Effectiveness scenario: ', pes)
+                        print(c_name)
                         available = True
                         jobs.append(p)
                         jobs[len(jobs) - 1].start()

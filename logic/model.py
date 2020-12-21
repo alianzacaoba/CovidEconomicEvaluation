@@ -67,11 +67,7 @@ class Model(object):
                             float(initial_pop[(initial_pop['DEPARTMENT'] == gv) & (initial_pop['AGE_GROUP'] == ev)
                                               & (initial_pop['WORK_GROUP'] == wv) &
                                               (initial_pop['HEALTH_GROUP'] == hv)].POPULATION.sum())
-        self.daly_vector = {'Home': {'INF_VALUE': 0.002, 'BASE_VALUE': 0.006, 'MAX_VALUE': 0.012},
-                           'Hospital': {'INF_VALUE': 0.032, 'BASE_VALUE': 0.051, 'MAX_VALUE': 0.074},
-                           'ICU': {'INF_VALUE': 0.088, 'BASE_VALUE': 0.133, 'MAX_VALUE': 0.190},
-                           'Death': {'INF_VALUE': 0.088, 'BASE_VALUE': 0.133, 'MAX_VALUE': 0.190},
-                           'Recovered': {'INF_VALUE': 0.0, 'BASE_VALUE': 0.0, 'MAX_VALUE': 0.006}}
+        self.daly_vector = {'Home': {'INF_VALUE': 0.002, 'BASE_VALUE': 0.006, 'MAX_VALUE': 0.012}, 'Hospital': {'INF_VALUE': 0.032, 'BASE_VALUE': 0.051, 'MAX_VALUE': 0.074}, 'ICU': {'INF_VALUE': 0.088, 'BASE_VALUE': 0.133, 'MAX_VALUE': 0.190}, 'Death': {'INF_VALUE': 1, 'BASE_VALUE': 1, 'MAX_VALUE': 1}, 'Recovered': {'INF_VALUE': 0.0, 'BASE_VALUE': 0.0, 'MAX_VALUE': 0.006}}
         self.vaccine_cost = {'INF_VALUE': 1035.892076, 'BASE_VALUE': 9413.864213, 'MAX_VALUE': 32021.81881}
         self.contact_matrix = {'HOME': {}, 'WORK': {}, 'SCHOOL': {}, 'OTHER': {}}
         con_matrix_home = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Home', engine="openpyxl")
@@ -139,7 +135,7 @@ class Model(object):
             beta: tuple = beta_f, death_coefficient: tuple = dc_f, arrival_coefficient: tuple = arrival_f,
             symptomatic_coefficient: float = spc_f, vaccine_priority: list = None, vaccine_capacities: dict = None,
             vaccine_effectiveness: dict = None, vaccine_start_day: dict = None, vaccine_end_day: dict = None,
-            sim_length: int = 365*3, export_type: str = 'csv', use_tqdm: bool = False):
+            sim_length: int = 365*3, export_type: list = None, use_tqdm: bool = False):
 
         # run_type:
         #   1) 'calibration': for calibration purposes, states f1,f2,v1,v2,e_f,a_f do not exist
@@ -147,6 +143,8 @@ class Model(object):
         #   3) 'non-vaccination': model
         # SU, E, A, R_A, P, Sy, C, H, I, R, D, Cases
         # export_type = {'all', 'json', 'csv', 'xlsx'}
+        export_type = ['csv'] if export_type is None else export_type
+
         population = dict()
         departments = self.departments
         age_groups = self.age_groups
@@ -352,9 +350,7 @@ class Model(object):
                                 cur_v_2 = v_2.values[t]
                                 cur_e_f = e_f.values[t]
                                 cur_a_f = a_f.values[t]
-                                cur_pob = cur_su + cur_e + cur_a + cur_r_a + cur_p + cur_sy + cur_c + cur_r_c + cur_h +\
-                                          cur_r_h + cur_i + cur_r_i + cur_r + cur_f_1 + cur_f_2 + cur_v_1 + cur_v_2 + \
-                                          cur_e_f + cur_a_f
+                                cur_pob = cur_su + cur_e + cur_a + cur_r_a + cur_p + cur_sy + cur_c + cur_r_c + cur_h + cur_r_h + cur_i + cur_r_i + cur_r + cur_f_1 + cur_f_2 + cur_v_1 + cur_v_2 + cur_e_f + cur_a_f
                                 # Run vaccination
                                 day_v.values[t + 1] = 0.0
                                 v_c.values[t + 1] = 0.0
@@ -411,9 +407,7 @@ class Model(object):
                                 df_1_dt = {-contagion_f_1}
                                 df_2_dt = {-contagion_f_2}
                                 de_dt = {contagion_sus,
-                                         ((self.arrival_rate['ARRIVAL_RATE'][gv] * arrival_coefficient[cur_region] 
-                                           * cur_pob / dep_pob[gv]) if self.arrival_rate['START_DAY'][gv] <= t <=
-                                                                       self.arrival_rate['END_DAY'][gv] else 0.0),
+                                         ((self.arrival_rate['ARRIVAL_RATE'][gv] * arrival_coefficient[cur_region] * cur_pob / dep_pob[gv]) if self.arrival_rate['START_DAY'][gv] <= t <= self.arrival_rate['END_DAY'][gv] else 0.0),
                                          -cur_e / t_e
                                          }
                                 de_f_dt = {contagion_f_1,
@@ -730,19 +724,19 @@ class Model(object):
                 del pop_pandas_g
                 pop_dict[gv] = pop_dict_g
             print('Begin exportation')
-            if export_type == 'all' or export_type == 'json':
+            if 'all' in export_type or 'json' in export_type :
                 print('Begin JSon exportation')
                 with open(DIR_OUTPUT + 'result_' + name + '.json', 'w') as fp:
                     json.dump(pop_dict, fp)
                 print('JSon ', DIR_OUTPUT + 'result_' + name + '.json', 'exported')
-            if export_type == 'all' or export_type == 'csv' or export_type == 'xlsx':
+            if 'all' in export_type  or 'csv' in export_type or 'xlsx' in export_type :
                 pop_pandas = pop_pandas.set_index(['day', 'Department', 'Health', 'Work', 'Age']).reset_index(
                     drop=False)
-                if export_type == 'all' or export_type == 'csv':
+                if 'all' in export_type or 'csv' in export_type :
                     print('Begin CSV exportation')
                     pop_pandas.to_csv(DIR_OUTPUT + 'result_' + name + '.csv', index=False)
                     print('CSV ', DIR_OUTPUT + 'result_' + name + '.csv', 'exported')
-                if export_type == 'all' or export_type == 'xlsx':
+                if 'all' in export_type or 'xlsx' in export_type :
                     print('Begin excel exportation')
                     wb = Workbook()
                     for gv in tqdm(departments):

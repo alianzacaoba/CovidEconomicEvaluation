@@ -72,7 +72,7 @@ class Calibration(object):
         dc = list()
         arrival = list()
         changed = False
-        number = max(multiprocessing.cpu_count(), 2)
+        number = max(multiprocessing.cpu_count()-1, 2)
         for reg in range(6):
             if new_point['error_cases'][reg] < self.ideal_values['error_cases'][reg]:
                 beta.append(new_point['beta'][reg])

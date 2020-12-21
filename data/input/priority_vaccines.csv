@@ -1,121 +1,57 @@
-﻿SCENARIO;AGE_GROUP;WORK_GROUP;HEALTH_GROUP
-1;e7;M;H
-1;e4;O;S
-1;e4;M;H
-1;e1;O;H
-1;e2;M;H
-1;e4;O;H
-1;e7;M;S
-1;e3;O;S
-1;e5;O;H
-1;e5;M;H
-1;e1;M;S
-1;e3;M;H
-1;e0;O;S
-1;e0;O;H
-1;e6;M;H
-1;e2;O;H
-1;e1;O;S
-1;e7;O;S
-1;e2;M;S
-1;e2;O;S
-1;e5;O;S
-1;e1;M;H
-1;e6;M;S
-1;e7;O;H
-1;e3;M;S
-1;e4;M;S
-1;e3;O;H
-1;e6;O;H
-1;e5;M;S
-1;e6;O;S
-2;e1;M;H
-2;e2;M;H
-2;e3;M;H
-2;e4;M;H
-2;e5;M;H
-2;e6;M;H
-2;e7;M;H
-2;e1;M;S
-2;e2;M;S
-2;e3;M;S
-2;e4;M;S
-2;e5;M;S
-2;e6;M;S
-2;e7;M;S
-2;e0;O;H
-2;e1;O;H
-2;e2;O;H
-2;e3;O;H
-2;e4;O;H
-2;e5;O;H
-2;e6;O;H
-2;e7;O;H
-2;e0;O;S
-2;e1;O;S
-2;e2;O;S
-2;e3;O;S
-2;e4;O;S
-2;e5;O;S
-2;e6;O;S
-2;e7;O;S
-3;e6;M;H
-3;e7;M;H
-3;e6;M;S
-3;e7;M;S
-3;e6;O;H
-3;e7;O;H
-3;e6;O;S
-3;e7;O;S
-3;e1;M;H
-3;e2;M;H
-3;e3;M;H
-3;e4;M;H
-3;e1;M;S
-3;e2;M;S
-3;e3;M;S
-3;e4;M;S
-3;e5;M;S
-3;e1;O;H
-3;e2;O;H
-3;e3;O;H
-3;e4;O;H
-3;e5;O;H
-3;e5;M;H
-3;e0;O;H
-3;e0;O;S
-3;e1;O;S
-3;e2;O;S
-3;e3;O;S
-3;e4;O;S
-3;e5;O;S
-4;e1;M;H
-4;e2;M;H
-4;e3;M;H
-4;e4;M;H
-4;e1;M;S
-4;e2;M;S
-4;e3;M;S
-4;e4;M;S
-4;e5;M;S
-4;e1;O;H
-4;e2;O;H
-4;e3;O;H
-4;e4;O;H
-4;e5;O;H
-4;e6;M;H
-4;e7;M;H
-4;e6;M;S
-4;e7;M;S
-4;e6;O;H
-4;e7;O;H
-4;e6;O;S
-4;e7;O;S
-4;e5;M;H
-4;e0;O;H
-4;e0;O;S
-4;e1;O;S
-4;e2;O;S
-4;e3;O;S
-4;e4;O;S
-4;e5;O;S
+PHASE,AGE_GROUP,WORK_GROUP,HEALTH_GROUP,PERCENT,SCENARIO
+1,e7,M,H, 1.0 ,GOB_POLICY
+1,e7,M,S, 1.0 ,GOB_POLICY
+1,e6,M,H, 1.0 ,GOB_POLICY
+1,e6,M,S, 1.0 ,GOB_POLICY
+1,e5,M,H, 1.0 ,GOB_POLICY
+1,e5,M,S, 1.0 ,GOB_POLICY
+1,e4,M,H, 1.0 ,GOB_POLICY
+1,e4,M,S, 1.0 ,GOB_POLICY
+1,e3,M,H, 1.0 ,GOB_POLICY
+1,e3,M,S, 1.0 ,GOB_POLICY
+1,e2,M,H, 1.0 ,GOB_POLICY
+1,e2,M,S, 1.0 ,GOB_POLICY
+1,e1,M,H, 1.0 ,GOB_POLICY
+1,e1,M,S, 1.0 ,GOB_POLICY
+1,e7,O,H, 1.0 ,GOB_POLICY
+1,e7,O,S, 1.0 ,GOB_POLICY
+2,e6,O,H, 1.0 ,GOB_POLICY
+2,e5,O,H, 1.0 ,GOB_POLICY
+2,e4,O,H, 1.0 ,GOB_POLICY
+2,e3,O,H, 1.0 ,GOB_POLICY
+2,e2,O,H, 1.0 ,GOB_POLICY
+2,e1,O,H, 0.4 ,GOB_POLICY
+3,e6,O,S, 1.0 ,GOB_POLICY
+3,e5,O,S, 1.0 ,GOB_POLICY
+3,e4,O,S, 1.0 ,GOB_POLICY
+3,e3,O,S, 1.0 ,GOB_POLICY
+3,e2,O,S, 1.0 ,GOB_POLICY
+3,e1,O,S, 0.4 ,GOB_POLICY
+1,e7,M,H, 1.0 ,EVERYONE
+1,e7,M,S, 1.0 ,EVERYONE
+1,e6,M,H, 1.0 ,EVERYONE
+1,e6,M,S, 1.0 ,EVERYONE
+1,e5,M,H, 1.0 ,EVERYONE
+1,e5,M,S, 1.0 ,EVERYONE
+1,e4,M,H, 1.0 ,EVERYONE
+1,e4,M,S, 1.0 ,EVERYONE
+1,e3,M,H, 1.0 ,EVERYONE
+1,e3,M,S, 1.0 ,EVERYONE
+1,e2,M,H, 1.0 ,EVERYONE
+1,e2,M,S, 1.0 ,EVERYONE
+1,e1,M,H, 1.0 ,EVERYONE
+1,e1,M,S, 1.0 ,EVERYONE
+1,e7,O,H, 1.0 ,EVERYONE
+1,e7,O,S, 1.0 ,EVERYONE
+1,e6,O,H, 1.0 ,EVERYONE
+1,e5,O,H, 1.0 ,EVERYONE
+1,e4,O,H, 1.0 ,EVERYONE
+1,e3,O,H, 1.0 ,EVERYONE
+1,e2,O,H, 1.0 ,EVERYONE
+1,e1,O,H, 0.4 ,EVERYONE
+1,e6,O,S, 1.0 ,EVERYONE
+1,e5,O,S, 1.0 ,EVERYONE
+1,e4,O,S, 1.0 ,EVERYONE
+1,e3,O,S, 1.0 ,EVERYONE
+1,e2,O,S, 1.0 ,EVERYONE
+1,e1,O,S, 0.4 ,EVERYONE

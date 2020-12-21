@@ -24,22 +24,32 @@ spc_f = 0.2761426379037166
 # 0.062333297880331026, 0.07248222923337995)
 # error : 0.03471753964393546
 
-
 def calculate_vaccine_assignments(department_population: dict, day: int, vaccine_priority: list,
-                                  vaccine_capacity: float, candidates_indexes: list):
+                                  vaccine_capacity: float, candidates_indexes: list, non_candidates_indexes: list):
     remaining_vaccines = vaccine_capacity
     assignation = dict()
-    for group in vaccine_priority:
-        ev, wv, hv = group
-        assigned = 0.0
+    for groups in vaccine_priority:
         if remaining_vaccines > 0.0:
-            candidates = sum(department_population[ev][wv][hv][cv].values[day] for cv in candidates_indexes)
-            if candidates > 0:
-                assigned = min(remaining_vaccines, candidates)
-                remaining_vaccines -= assigned
-                assigned /= candidates
-        assignation[(ev, wv, hv)] = assigned
-        if assigned == 0:
+            candidates = list()
+            for group in groups:
+                ev, wv, hv, percent = group
+                if percent == 1:
+                    candidates[(ev,wv,hv)] = sum(department_population[ev][wv][hv][cv].values[day]
+                                                 for cv in candidates_indexes)
+                else:
+                    candidates[(ev,wv,hv)] = max(percent*sum(department_population[ev][wv][hv][cv].values[day]
+                                                             for cv in candidates_indexes)
+                                                 -(percent-1) * sum(department_population[ev][wv][hv][cv].values[day]
+                                                     for cv in non_candidates_indexes),0.0)
+            given_vaccines = min(remaining_vaccines, sum(candidates.values()))
+            remaining_vaccines -= given_vaccines
+            for group in groups:
+                ev, wv, hv, percent = group
+                assignation[(ev,wv,hv)] = given_vaccines*candidates[(ev,wv,hv)]/\
+                                          (sum(candidates.values())*
+                                           sum(department_population[ev][wv][hv][cv].values[day]
+                                               for cv in candidates_indexes))
+        else:
             return assignation
     return assignation
 
@@ -67,7 +77,11 @@ class Model(object):
                             float(initial_pop[(initial_pop['DEPARTMENT'] == gv) & (initial_pop['AGE_GROUP'] == ev)
                                               & (initial_pop['WORK_GROUP'] == wv) &
                                               (initial_pop['HEALTH_GROUP'] == hv)].POPULATION.sum())
-        self.daly_vector = {'Home': {'INF_VALUE': 0.002, 'BASE_VALUE': 0.006, 'MAX_VALUE': 0.012}, 'Hospital': {'INF_VALUE': 0.032, 'BASE_VALUE': 0.051, 'MAX_VALUE': 0.074}, 'ICU': {'INF_VALUE': 0.088, 'BASE_VALUE': 0.133, 'MAX_VALUE': 0.190}, 'Death': {'INF_VALUE': 1, 'BASE_VALUE': 1, 'MAX_VALUE': 1}, 'Recovered': {'INF_VALUE': 0.0, 'BASE_VALUE': 0.0, 'MAX_VALUE': 0.006}}
+        self.daly_vector = {'Home': {'INF_VALUE': 0.002, 'BASE_VALUE': 0.006, 'MAX_VALUE': 0.012},
+                            'Hospital': {'INF_VALUE': 0.032, 'BASE_VALUE': 0.051, 'MAX_VALUE': 0.074},
+                            'ICU': {'INF_VALUE': 0.088, 'BASE_VALUE': 0.133, 'MAX_VALUE': 0.190},
+                            'Death': {'INF_VALUE': 1, 'BASE_VALUE': 1, 'MAX_VALUE': 1},
+                            'Recovered': {'INF_VALUE': 0.0, 'BASE_VALUE': 0.0, 'MAX_VALUE': 0.006}}
         self.vaccine_cost = {'INF_VALUE': 1035.892076, 'BASE_VALUE': 9413.864213, 'MAX_VALUE': 32021.81881}
         self.contact_matrix = {'HOME': {}, 'WORK': {}, 'SCHOOL': {}, 'OTHER': {}}
         con_matrix_home = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Home', engine="openpyxl")
@@ -192,7 +206,7 @@ class Model(object):
         candidates_indexes = [0, 1, 2, 3, 15, 17] if run_type == 'vaccination' else [0, 1, 2, 3]
         alive_compartments = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 19, 20] \
             if run_type == 'vaccination' else [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-
+        non_candidate_indexes = list(set(alive_compartments)-set(candidates_indexes))
         for gv in departments:
             population_g = dict()
             for ev in age_groups:
@@ -276,7 +290,8 @@ class Model(object):
                     vaccine_assignments = calculate_vaccine_assignments(department_population=population[gv],
                                                                         day=t, vaccine_priority=vaccine_priority,
                                                                         vaccine_capacity=float(vaccine_capacities[gv]),
-                                                                        candidates_indexes=candidates_indexes)
+                                                                        candidates_indexes=candidates_indexes,
+                                                                        non_candidates_indexes=non_candidate_indexes)
                 else:
                     vaccine_assignments = None
                 i_1 = list()
@@ -350,7 +365,9 @@ class Model(object):
                                 cur_v_2 = v_2.values[t]
                                 cur_e_f = e_f.values[t]
                                 cur_a_f = a_f.values[t]
-                                cur_pob = cur_su + cur_e + cur_a + cur_r_a + cur_p + cur_sy + cur_c + cur_r_c + cur_h + cur_r_h + cur_i + cur_r_i + cur_r + cur_f_1 + cur_f_2 + cur_v_1 + cur_v_2 + cur_e_f + cur_a_f
+                                cur_pob = cur_su + cur_e + cur_a + cur_r_a + cur_p + cur_sy + cur_c + cur_r_c + cur_h +\
+                                          cur_r_h + cur_i + cur_r_i + cur_r + cur_f_1 + cur_f_2 + cur_v_1 + cur_v_2 + \
+                                          cur_e_f + cur_a_f
                                 # Run vaccination
                                 day_v.values[t + 1] = 0.0
                                 v_c.values[t + 1] = 0.0
@@ -407,7 +424,9 @@ class Model(object):
                                 df_1_dt = {-contagion_f_1}
                                 df_2_dt = {-contagion_f_2}
                                 de_dt = {contagion_sus,
-                                         ((self.arrival_rate['ARRIVAL_RATE'][gv] * arrival_coefficient[cur_region] * cur_pob / dep_pob[gv]) if self.arrival_rate['START_DAY'][gv] <= t <= self.arrival_rate['END_DAY'][gv] else 0.0),
+                                         ((self.arrival_rate['ARRIVAL_RATE'][gv] * arrival_coefficient[cur_region] *
+                                           cur_pob / dep_pob[gv]) if self.arrival_rate['START_DAY'][gv] <= t <=
+                                                                     self.arrival_rate['END_DAY'][gv] else 0.0),
                                          -cur_e / t_e
                                          }
                                 de_f_dt = {contagion_f_1,
@@ -724,19 +743,19 @@ class Model(object):
                 del pop_pandas_g
                 pop_dict[gv] = pop_dict_g
             print('Begin exportation')
-            if 'all' in export_type or 'json' in export_type :
+            if 'all' in export_type or 'json' in export_type:
                 print('Begin JSon exportation')
                 with open(DIR_OUTPUT + 'result_' + name + '.json', 'w') as fp:
                     json.dump(pop_dict, fp)
                 print('JSon ', DIR_OUTPUT + 'result_' + name + '.json', 'exported')
-            if 'all' in export_type  or 'csv' in export_type or 'xlsx' in export_type :
+            if 'all' in export_type or 'csv' in export_type or 'xlsx' in export_type:
                 pop_pandas = pop_pandas.set_index(['day', 'Department', 'Health', 'Work', 'Age']).reset_index(
                     drop=False)
-                if 'all' in export_type or 'csv' in export_type :
+                if 'all' in export_type or 'csv' in export_type:
                     print('Begin CSV exportation')
                     pop_pandas.to_csv(DIR_OUTPUT + 'result_' + name + '.csv', index=False)
                     print('CSV ', DIR_OUTPUT + 'result_' + name + '.csv', 'exported')
-                if 'all' in export_type or 'xlsx' in export_type :
+                if 'all' in export_type or 'xlsx' in export_type:
                     print('Begin excel exportation')
                     wb = Workbook()
                     for gv in tqdm(departments):

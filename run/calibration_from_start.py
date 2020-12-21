@@ -5,6 +5,7 @@ import numpy as np
 import datetime
 import json
 import time
+from logic.main_run import MainRun
 from root import DIR_OUTPUT
 
 
@@ -20,7 +21,7 @@ c_arrival_inf = np.ones(6)*1.0
 c_arrival_base = np.ones(6)*15
 c_arrival_sup = np.ones(6)*30
 c_spc_inf = 0
-c_spc_base = 0.3
+c_spc_base = 0.31
 c_spc_sup = 1
 calibration_model = Calibration()
 c_beta_ant = 0.0
@@ -32,6 +33,7 @@ n_cases = 7*(len(c_beta_base) + len(c_death_base) + len(c_arrival_base)+1)+1
 c_total = True
 n_changed = 0
 previous_error = [100000000000000.0]
+model_run = MainRun()
 while n_changed < 5:
     n_iteration += 1
     print('Cycle number:', n_iteration)
@@ -65,12 +67,13 @@ while n_changed < 5:
         radius = max(abs(c_spc_base - c_spc_inf), abs(c_spc_base - c_spc_sup))/2
         c_spc_inf = max(c_spc_base - radius, 0.00000000000001)
         c_spc_sup = min(c_spc_base + radius, 1.0)
-    if round(float(calibration_model.ideal_values['error']), 8) < round(float(previous_error[len(previous_error) - 1]), 8):
+    if round(float(calibration_model.ideal_values['error']), 8) < round(float(previous_error[len(previous_error) - 1]),
+                                                                        8):
         n_changed = 0
     else:
         n_changed += 1
     previous_error.append(float(calibration_model.ideal_values['error']))
-
+    model_run.run_quality_test(c_beta_base, c_death_base, c_arrival_base, c_spc_base, 'NM_cycle_' + str(n_iteration))
 end_processing_s_t = time.process_time()
 end_time_t = datetime.datetime.now()
 print('Performance: {0}'.format(end_processing_s_t - start_processing_s_t))
@@ -94,3 +97,4 @@ c_wb.new_sheet('All_values', data=c_values)
 c_wb.save(DIR_OUTPUT + 'calibration_nm_results_from_start_' + ('total' if c_total else 'new') + '.xlsx')
 print('Excel ', DIR_OUTPUT + 'calibration_nm_results_from_start_' + ('total' if c_total else 'new') + '.xlsx',
       'exported')
+model_run.run(c_beta_base, c_death_base, c_arrival_base, c_spc_base)

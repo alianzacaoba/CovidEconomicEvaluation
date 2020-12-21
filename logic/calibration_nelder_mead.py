@@ -26,6 +26,8 @@ class Calibration(object):
         self.real_cases = pd.read_csv(DIR_INPUT + 'real_cases.csv')
         self.real_deaths = pd.read_csv(DIR_INPUT + 'death_cases.csv')
         self.max_day = int(self.real_cases.SYM_DAY.max())
+        self.error_ratio = 10
+        self.error_power = 2
 
     @staticmethod
     def chunks(lv, nv):
@@ -45,18 +47,18 @@ class Calibration(object):
             del sim_results_alt
         error_cases = list()
         for reg in range(6):
-            weight = np.array([(i+1-dates['days_cases'][reg + 1])**2
+            weight = np.array([(i+1-dates['days_cases'][reg + 1])**self.error_power
                                for i in range(dates['days_cases'][reg + 1], self.max_day+1)]) /\
-                     sum((i+1-dates['days_cases'][reg + 1])**2 for i in range(dates['days_cases'][reg + 1],
+                     sum((i+1-dates['days_cases'][reg + 1])**self.error_power for i in range(dates['days_cases'][reg + 1],
                                                                               self.max_day+1))
             current_error = np.power(sim_results[dates['days_cases'][reg + 1]:, reg] /
                                      real_case[dates['days_cases'][reg + 1]:, reg] - 1, 2)
             error_cases.append(np.sum(np.multiply(weight, current_error)))
         error_deaths = list()
         for reg in range(6):
-            weight = np.array([(i + 1 - dates['days_deaths'][reg + 1])**2
+            weight = np.array([(i + 1 - dates['days_deaths'][reg + 1])**self.error_power
                                for i in range(dates['days_deaths'][reg + 1], self.max_day+1)]) / \
-                     sum((i + 1 - dates['days_deaths'][reg + 1])**2 for i in
+                     sum((i + 1 - dates['days_deaths'][reg + 1])**self.error_power for i in
                          range(dates['days_deaths'][reg + 1], self.max_day+1))
             current_error = np.power(sim_results[dates['days_deaths'][reg + 1]:, 6 + reg] /
                                      real_death[dates['days_deaths'][reg + 1]:, reg] - 1, 2)

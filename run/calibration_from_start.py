@@ -38,6 +38,8 @@ n_changed = 0
 previous_error = [100000000000000.0]
 model_run = MainRun()
 weights = (100, 10, 1)
+model_run.run_quality_test(c_beta_base, c_death_base, c_arrival_base, c_spc_base, 'NM_cycle_W' + str(weights[0]) + '_' +
+                               str(weights[1]) + '_' + str(weights[2]) + '_' + str(n_iteration))
 while n_changed < 5:
     n_iteration += 1
     print('Cycle number:', n_iteration)
@@ -77,8 +79,9 @@ while n_changed < 5:
     else:
         n_changed += 1
     previous_error.append(float(calibration_model.ideal_values['error']))
-    model_run.run_quality_test(c_beta_base, c_death_base, c_arrival_base, c_spc_base, 'NM_cycle_W' + weights[0] + '_' +
-                               weights[1] + '_' + weights[2] + '_' + str(n_iteration))
+    model_run.run_quality_test(c_beta_base, c_death_base, c_arrival_base, c_spc_base,
+                               'NM_cycle_W' + str(weights[0]) + '_' + str(weights[1]) + '_' + str(weights[2]) + '_' +
+                               str(n_iteration))
 end_processing_s_t = time.process_time()
 end_time_t = datetime.datetime.now()
 print('Performance: {0}'.format(end_processing_s_t - start_processing_s_t))

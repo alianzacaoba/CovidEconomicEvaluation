@@ -310,7 +310,8 @@ class Calibration(object):
             organized_result['error'] = current['error']
             organized_results.append(organized_result)
         results_pd = pd.DataFrame(organized_results).drop_duplicates(ignore_index=True)
-        file_name = DIR_OUTPUT + 'calibration_nm_results_' + 'W_' + weights[0] + '_' + weights[1] + '_' + weights[2] + \
+        file_name = DIR_OUTPUT + 'calibration_nm_results_' + 'W_' + str(weights[0]) + '_' + str(weights[1]) + '_' + \
+                    str(weights[2]) + \
                     ' ' + ('total' if total else 'new') + str(iteration)
         with open(file_name + '.json', 'w') as fp_a:
             json.dump(self.current_results, fp_a)

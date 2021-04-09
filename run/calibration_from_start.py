@@ -11,14 +11,17 @@ from root import DIR_OUTPUT
 
 start_processing_s_t = time.process_time()
 start_time_t = datetime.datetime.now()
-c_beta_inf = np.ones(6)*0.0000000000001
-c_beta_base = np.ones(6)*0.1
-c_beta_sup = np.ones(6)*0.1
-c_death_inf = np.zeros(6)
-c_death_base = np.ones(6)
+c_beta_inf = np.ones(6)*0.0001
+c_beta_base = (0.022007606119173795, 0.017863980243733434, 0.018196130566806898, 0.018457626077325776,
+               0.01748616435199459, 0.016227115077950355)
+c_beta_sup = np.ones(6)*0.5
+c_death_inf = np.ones(6)*0.5
+c_death_base = (1.1323965306925503, 0.7125429486836731, 1.0444436705577909, 1.0455277531926157, 0.8937395613665182,
+                0.9248158502415792)
 c_death_sup = np.ones(6)*2.2
 c_arrival_inf = np.ones(6)*1.0
-c_arrival_base = np.ones(6)*15
+c_arrival_base = (15.610984192361858, 7.118033263153407, 13.580052334837838, 6.872622856121195, 19.179202373513895,
+                  23.821317070305813)
 c_arrival_sup = np.ones(6)*30
 c_spc_inf = 0
 c_spc_base = 0.31
@@ -34,6 +37,7 @@ c_total = True
 n_changed = 0
 previous_error = [100000000000000.0]
 model_run = MainRun()
+weights = (100, 10, 1)
 while n_changed < 5:
     n_iteration += 1
     print('Cycle number:', n_iteration)
@@ -43,7 +47,7 @@ while n_changed < 5:
                                       symptomatic_probability_range=[c_spc_inf, c_spc_base, c_spc_sup],
                                       dates={'days_cases': days_cases, 'days_deaths': days_deaths}, total=c_total,
                                       iteration=n_iteration, max_no_improvement=100,
-                                      min_value_to_iterate=100000, error_precision=7)
+                                      min_value_to_iterate=100000, error_precision=7, weights=weights)
     print(' End of cycle: ', n_iteration)
     print(' New error:', calibration_model.ideal_values['error'])
     print(' Previous errors:', previous_error)
@@ -73,7 +77,8 @@ while n_changed < 5:
     else:
         n_changed += 1
     previous_error.append(float(calibration_model.ideal_values['error']))
-    model_run.run_quality_test(c_beta_base, c_death_base, c_arrival_base, c_spc_base, 'NM_cycle_' + str(n_iteration))
+    model_run.run_quality_test(c_beta_base, c_death_base, c_arrival_base, c_spc_base, 'NM_cycle_W' + weights[0] + '_' +
+                               weights[1] + '_' + weights[2] + '_' + str(n_iteration))
 end_processing_s_t = time.process_time()
 end_time_t = datetime.datetime.now()
 print('Performance: {0}'.format(end_processing_s_t - start_processing_s_t))
@@ -87,14 +92,16 @@ print('Total cycles:', n_iteration)
 print('Optimum:')
 for oc in calibration_model.ideal_values:
     print(" ", oc, ":", calibration_model.ideal_values[oc])
-with open(DIR_OUTPUT + 'calibration_consolidated_results_from_start_' +
-          ('total' if c_total else 'new') + '.json', 'w') as fp:
+file_name = DIR_OUTPUT + 'calibration_consolidated_nm_results_' + 'W_' + weights[0] + '_' + weights[1] + '_' + \
+            weights[2] + ' ' + ('total' if c_total else 'new')
+with open(file_name + '.json', 'w') as fp:
     json.dump(calibration_model.results, fp)
 results_pd_c = pd.DataFrame(calibration_model.results)
 c_values = [results_pd_c.columns] + list(results_pd_c.values)
 c_wb = Workbook()
 c_wb.new_sheet('All_values', data=c_values)
-c_wb.save(DIR_OUTPUT + 'calibration_nm_results_from_start_' + ('total' if c_total else 'new') + '.xlsx')
-print('Excel ', DIR_OUTPUT + 'calibration_nm_results_from_start_' + ('total' if c_total else 'new') + '.xlsx',
+
+c_wb.save(file_name + '.xlsx')
+print('Excel ', file_name + '.xlsx',
       'exported')
 model_run.run(c_beta_base, c_death_base, c_arrival_base, c_spc_base)

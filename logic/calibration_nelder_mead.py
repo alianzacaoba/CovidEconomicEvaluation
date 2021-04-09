@@ -1,4 +1,7 @@
 import multiprocessing
+
+from tqdm import tqdm
+
 from logic.model import Model
 from pyexcelerate import Workbook
 import numpy as np
@@ -7,6 +10,11 @@ import datetime
 import json
 import time
 from root import DIR_INPUT, DIR_OUTPUT
+
+
+def chunks(lv, nv):
+    for i in range(0, len(lv), nv):
+        yield lv[i:i + nv]
 
 
 class Calibration(object):
@@ -25,21 +33,24 @@ class Calibration(object):
         self.type_params['cost'] = 'BASE_VALUE'
         self.real_cases = pd.read_csv(DIR_INPUT + 'real_cases.csv')
         self.real_deaths = pd.read_csv(DIR_INPUT + 'death_cases.csv')
+        self.real_seroprevalence = pd.read_csv(DIR_INPUT + 'seroprevalence.csv', index_col=0).to_dict('index')
         self.max_day = int(self.real_cases.SYM_DAY.max())
         self.error_ratio = 10
         self.error_power = 2
 
-    @staticmethod
-    def chunks(lv, nv):
-        for i in range(0, len(lv), nv):
-            yield lv[i:i + nv]
-
-    def calculate_point(self, real_case: np.array, real_death: np.array, beta: tuple, dc: tuple, arrival: tuple,
-                        symptomatic_probability: float, dates: dict, end_list: list, total: bool = True):
+    def calculate_point(self, real_seroprevalence: dict, real_case: np.array, real_death: np.array, weights: tuple,
+                        beta: tuple, dc: tuple, arrival: tuple, symptomatic_probability: float, dates: dict,
+                        end_list: list, total: bool = True):
 
         sim_results = self.model.run(self.type_params, name='Calibration1', run_type='calibration', beta=beta,
                                      death_coefficient=dc, arrival_coefficient=arrival, sim_length=self.max_day,
                                      symptomatic_coefficient=symptomatic_probability, use_tqdm=False)
+        error_seroprevalence = list()
+        for reg in range(1, 7):
+            real_point = real_seroprevalence[reg]['SEROPREVALENCE']
+            error_seroprevalence.append(abs(real_point - sim_results[real_seroprevalence[reg]['SYM_DAY'], 11 + reg])
+                                        / real_point)
+
         if not total:
             sim_results_alt = sim_results.copy()
             for k in range(1, len(sim_results)):
@@ -49,8 +60,8 @@ class Calibration(object):
         for reg in range(6):
             weight = np.array([(i+1-dates['days_cases'][reg + 1])**self.error_power
                                for i in range(dates['days_cases'][reg + 1], self.max_day+1)]) /\
-                     sum((i+1-dates['days_cases'][reg + 1])**self.error_power for i in range(dates['days_cases'][reg + 1],
-                                                                              self.max_day+1))
+                     sum((i+1-dates['days_cases'][reg + 1])**self.error_power
+                         for i in range(dates['days_cases'][reg + 1], self.max_day+1))
             current_error = np.power(sim_results[dates['days_cases'][reg + 1]:, reg] /
                                      real_case[dates['days_cases'][reg + 1]:, reg] - 1, 2)
             error_cases.append(np.sum(np.multiply(weight, current_error)))
@@ -63,33 +74,41 @@ class Calibration(object):
             current_error = np.power(sim_results[dates['days_deaths'][reg + 1]:, 6 + reg] /
                                      real_death[dates['days_deaths'][reg + 1]:, reg] - 1, 2)
             error_deaths.append(np.sum(np.multiply(weight, current_error)))
-        error = float((5 * sum(error_cases) + sum(error_deaths))/36)
+        error = (weights[0]*sum(error_seroprevalence) + weights[1] * sum(error_cases) + weights[2]*sum(error_deaths)) /\
+                (6*sum(weights))
         end_list.append({'beta': tuple(beta), 'dc': tuple(dc), 'arrival': tuple(arrival),
-                         'spc': symptomatic_probability, 'error_cases': tuple(error_cases),
-                         'error_deaths': tuple(error_deaths), 'error': error})
+                         'spc': symptomatic_probability, 'error_seroprevalence': tuple(error_seroprevalence),
+                         'error_cases': tuple(error_cases), 'error_deaths': tuple(error_deaths), 'error': error})
 
-    def try_new_best(self, new_point: dict, real_case: np.array, real_death: np.array, dates: dict, result_list: list,
-                     total: bool = True):
+    def try_new_best(self, new_point: dict, real_seroprevalence: dict, real_case: np.array, real_death: np.array,
+                     weights: tuple, dates: dict, result_list: list, total: bool = True):
         beta = list()
         dc = list()
         arrival = list()
         changed = False
         number = max(multiprocessing.cpu_count()-1, 2)
         for reg in range(6):
-            if new_point['error_cases'][reg] < self.ideal_values['error_cases'][reg]:
+            if new_point['error_cases'][reg] < self.ideal_values['error_cases'][reg] or \
+                    new_point['error_seroprevalence'][reg] < self.ideal_values['error_seroprevalence'][reg]:
                 beta.append(new_point['beta'][reg])
                 arrival.append(new_point['arrival'][reg])
                 if new_point['error_deaths'][reg] < self.ideal_values['error_deaths'][reg]:
                     dc.append(new_point['dc'][reg])
                 else:
-                    dc.append(self.ideal_values['dc'][reg]*new_point['beta'][reg]/self.ideal_values['beta'][reg])
+                    try:
+                        dc.append(self.ideal_values['dc'][reg]*new_point['beta'][reg]/self.ideal_values['beta'][reg])
+                    except:
+                        dc.append(new_point['dc'][reg])
                 changed = True
             else:
                 beta.append(self.ideal_values['beta'][reg])
                 arrival.append(self.ideal_values['arrival'][reg])
                 if new_point['error_deaths'][reg] < self.ideal_values['error_deaths'][reg] and new_point['beta'][reg] \
                         > 0.0:
-                    dc.append(new_point['dc'][reg]*self.ideal_values['beta'][reg]/new_point['beta'][reg])
+                    try:
+                        dc.append(new_point['dc'][reg]*self.ideal_values['beta'][reg]/new_point['beta'][reg])
+                    except:
+                        dc.append(new_point['dc'][reg])
                     changed = True
                 else:
                     dc.append(self.ideal_values['dc'][reg])
@@ -109,17 +128,19 @@ class Calibration(object):
                             current_spc:
                         exists = True
                 if not exists:
-                    points.append((real_case, real_death, beta, dc, arrival, current_spc, dates, result_list, total))
+                    points.append((real_seroprevalence, real_case, real_death, weights, beta, dc, arrival, current_spc,
+                                   dates, result_list, total))
             return points
         return []
 
     def run_calibration(self, beta_range: list, death_range: list, arrival_range: list,
                         symptomatic_probability_range: list, dates: dict, dimensions: int = 19, initial_cases: int = 30,
                         total: bool = True, iteration: int = 1, max_no_improvement: int = 100,
-                        min_value_to_iterate: float = 10000.0, error_precision: int = 7):
+                        min_value_to_iterate: float = 10000.0, error_precision: int = 7, weights: list = (1, 1, 1)):
+        # Weights: [Seroprevalence, Cases, Deaths]
         start_processing_s = time.process_time()
         start_time = datetime.datetime.now()
-
+        real_seroprevalence = self.real_seroprevalence
         real_case = np.array((self.real_cases[['TOTAL_1', 'TOTAL_2', 'TOTAL_3', 'TOTAL_4', 'TOTAL_5', 'TOTAL_6']]
                               if total else self.real_cases[['NEW_1', 'NEW_2', 'NEW_3', 'NEW_4', 'NEW_5', 'NEW_6']]),
                              dtype='float64')
@@ -151,21 +172,24 @@ class Calibration(object):
         return_list = manager.list()
         jobs = list()
         cores = multiprocessing.cpu_count() - 1
-        p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta), tuple(dc),
-                                                                       tuple(arrival), symptomatic_probability, dates,
-                                                                       return_list, total))
+        p = multiprocessing.Process(target=self.calculate_point, args=(real_seroprevalence, real_case, real_death,
+                                                                       weights, tuple(beta), tuple(dc), tuple(arrival),
+                                                                       symptomatic_probability, dates, return_list,
+                                                                       total))
         jobs.append(p)
         for i in range(initial_cases):
             beta = [x_beta[0][i], x_beta[1][i], x_beta[2][i], x_beta[3][i], x_beta[4][i], x_beta[5][i]]
             dc = [x_d_c[0][i], x_d_c[1][i], x_d_c[2][i], x_d_c[3][i], x_d_c[4][i], x_d_c[5][i]]
             arrival = [x_arrival[0][i], x_arrival[1][i], x_arrival[2][i], x_arrival[3][i], x_arrival[4][i],
                        x_arrival[5][i]]
-            p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta), tuple(dc),
-                                                                           tuple(arrival), x_symptomatic[i], dates,
-                                                                           return_list, total))
+            symptomatic_probability = x_symptomatic[i]
+            p = multiprocessing.Process(target=self.calculate_point, args=(real_seroprevalence, real_case, real_death,
+                                                                           weights, tuple(beta), tuple(dc),
+                                                                           tuple(arrival), symptomatic_probability,
+                                                                           dates, return_list, total))
             jobs.append(p)
         block = 0
-        for sets in self.chunks(jobs, cores):
+        for sets in tqdm(chunks(jobs, cores)):
             for job in sets:
                 job.start()
             for job in sets:
@@ -182,7 +206,9 @@ class Calibration(object):
                     self.ideal_values = v_new
                 if v_new not in self.results:
                     self.results.append(v_new)
-                list_to_add = self.try_new_best(v_new, real_case, real_death, dates, return_list2, total)
+                list_to_add = self.try_new_best(new_point=v_new, real_seroprevalence=real_seroprevalence,
+                                                real_case=real_case, real_death=real_death, weights=weights,
+                                                dates=dates, result_list=return_list2, total=total)
                 for new_point in list_to_add:
                     p = multiprocessing.Process(target=self.calculate_point, args=new_point)
                     jobs2.append(p)
@@ -214,8 +240,11 @@ class Calibration(object):
                 it += 1
                 print('Nelder-Mead iteration', int(it + 1))
                 best_error = float(self.ideal_values['error'])
-                nelder_mead_result = self.nelder_mead_iteration(best_values=best_results, real_case=real_case,
-                                                                real_death=real_death, dates=dates, total=total,
+                nelder_mead_result = self.nelder_mead_iteration(best_values=best_results,
+                                                                real_seroprevalence=real_seroprevalence,
+                                                                real_case=real_case,
+                                                                real_death=real_death, pen_weights=weights,
+                                                                dates=dates, total=total,
                                                                 n_relevant=dimensions)
                 best_results_n = nelder_mead_result['values']
                 for vi in best_results_n:
@@ -227,12 +256,18 @@ class Calibration(object):
                     jobs2 = list()
                     manager2 = multiprocessing.Manager()
                     return_list = manager2.list()
-                    list_to_add = self.try_new_best(best_results_n[v_test], real_case, real_death, dates, return_list,
-                                                    total)
+                    list_to_add = self.try_new_best(new_point=best_results_n[v_test],
+                                                    real_seroprevalence=real_seroprevalence,
+                                                    real_case=real_case,
+                                                    real_death=real_death,
+                                                    weights=weights,
+                                                    dates=dates,
+                                                    result_list=return_list,
+                                                    total=total)
                     for new_point in list_to_add:
                         p = multiprocessing.Process(target=self.calculate_point, args=new_point)
                         jobs2.append(p)
-                    for sets in self.chunks(jobs2, cores):
+                    for sets in chunks(jobs2, cores):
                         for job in sets:
                             job.start()
                         for job in sets:
@@ -250,7 +285,8 @@ class Calibration(object):
                 best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(
                     dimensions + 1)
                 best_results = best_results.to_dict(orient='index')
-                n_no_changes = 0 if round(self.ideal_values['error'], error_precision) < round(best_error, error_precision) else n_no_changes + 1
+                n_no_changes = 0 if round(self.ideal_values['error'], error_precision) < \
+                                    round(best_error, error_precision) else n_no_changes + 1
                 print('Current best results:')
                 for iv in self.ideal_values:
                     print(iv, ":", self.ideal_values[iv])
@@ -274,14 +310,15 @@ class Calibration(object):
             organized_result['error'] = current['error']
             organized_results.append(organized_result)
         results_pd = pd.DataFrame(organized_results).drop_duplicates(ignore_index=True)
-        with open(DIR_OUTPUT + 'calibration_nm_results_' + ('total' if total else 'new') + str(iteration) + '.json',
-                  'w') as fp_a:
+        file_name = DIR_OUTPUT + 'calibration_nm_results_' + 'W_' + weights[0] + '_' + weights[1] + '_' + weights[2] + \
+                    ' ' + ('total' if total else 'new') + str(iteration)
+        with open(file_name + '.json', 'w') as fp_a:
             json.dump(self.current_results, fp_a)
         values = [results_pd.columns] + list(results_pd.values)
         wb = Workbook()
         wb.new_sheet('All_values', data=values)
-        wb.save(DIR_OUTPUT + 'calibration_nm_results_' + ('total' if total else 'new') + str(iteration) + '.xlsx')
-        print('Excel ', DIR_OUTPUT + 'calibration_nm_results_2_' + ('total' if total else 'new') + '.xlsx', 'exported')
+        wb.save(file_name + '.xlsx')
+        print('Excel ', file_name + '.xlsx', 'exported')
 
         end_processing_s = time.process_time()
         end_time = datetime.datetime.now()
@@ -293,9 +330,10 @@ class Calibration(object):
         print('Execution Time: {0} minutes {1} seconds'.format(this_mm, this_ss))
         print('Execution Time: {0} milliseconds'.format(this_execution_time * 1000))
 
-    def nelder_mead_iteration(self, best_values: dict, real_case: np.array,  real_death: np.array, dates: dict,
-                              n_relevant: int, alpha: float = 1.0, beta_p: float = 0.5, gamma: float = 2.0,
-                              delta: float = 0.5, total: bool = True):
+    def nelder_mead_iteration(self, best_values: dict, real_seroprevalence: dict, real_case: np.array,
+                              real_death: np.array, pen_weights: tuple, dates: dict, n_relevant: int,
+                              alpha: float = 1.0, beta_p: float = 0.5, gamma: float = 2.0, delta: float = 0.5,
+                              total: bool = True):
         weights = list()
         worst_point = best_values[n_relevant]
         np_worst_point = np.array([worst_point['beta'], worst_point['dc'], worst_point['arrival'], np.ones(6) *
@@ -303,7 +341,8 @@ class Calibration(object):
         for vi in range(len(best_values)-1):
             weights.append(float(abs(best_values[vi]['error']-worst_point['error']) /
                            (sum(sum((best_values[vi][var][i]-worst_point[var][i])**2 for i in range(6))
-                                for var in ['beta', 'dc', 'arrival'])+(best_values[vi]['spc']-worst_point['spc'])**2)**0.5)
+                                for var in ['beta', 'dc', 'arrival']) +
+                            (best_values[vi]['spc']-worst_point['spc'])**2)**0.5)
                            )
 
         if sum(weights) == 0:
@@ -337,9 +376,10 @@ class Calibration(object):
             if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
                 calculate = False
         if calculate:
-            p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta),
-                                                                           tuple(dc), tuple(arrival), spc, dates,
-                                                                           return_list, total))
+            p = multiprocessing.Process(target=self.calculate_point, args=(real_seroprevalence, real_case, real_death,
+                                                                           pen_weights, tuple(beta), tuple(dc),
+                                                                           tuple(arrival), spc,
+                                                                           dates, return_list, total))
             jobs.append(p)
             jobs[len(jobs)-1].start()
         expansion_point = np.maximum(np_centroid - gamma * (np_centroid - np_worst_point), 0.0)
@@ -352,9 +392,10 @@ class Calibration(object):
             if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
                 calculate = False
         if calculate:
-            p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta),
-                                                                           tuple(dc), tuple(arrival), spc, dates,
-                                                                           return_list, total))
+            p = multiprocessing.Process(target=self.calculate_point, args=(real_seroprevalence, real_case, real_death,
+                                                                           pen_weights, tuple(beta), tuple(dc),
+                                                                           tuple(arrival), spc,
+                                                                           dates, return_list, total))
             jobs.append(p)
             jobs[len(jobs)-1].start()
         outside_contraction_point = np.maximum(np_centroid + beta_p * (np_centroid - np_worst_point), 0.0)
@@ -367,9 +408,10 @@ class Calibration(object):
             if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
                 calculate = False
         if calculate:
-            p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta),
-                                                                           tuple(dc), tuple(arrival), spc, dates,
-                                                                           return_list, total))
+            p = multiprocessing.Process(target=self.calculate_point, args=(real_seroprevalence, real_case, real_death,
+                                                                           pen_weights, tuple(beta), tuple(dc),
+                                                                           tuple(arrival), spc,
+                                                                           dates, return_list, total))
             jobs.append(p)
             jobs[len(jobs)-1].start()
         inside_contraction_point = np.maximum(np_centroid + beta_p * (np_centroid - np_worst_point), 0.0)
@@ -382,9 +424,10 @@ class Calibration(object):
             if point['beta'] == beta and point['dc'] == dc and point['arrival'] == arrival and point['spc'] == spc:
                 calculate = False
         if calculate:
-            p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta),
-                                                                           tuple(dc), tuple(arrival), spc, dates,
-                                                                           return_list, total))
+            p = multiprocessing.Process(target=self.calculate_point, args=(real_seroprevalence, real_case, real_death,
+                                                                           pen_weights, tuple(beta), tuple(dc),
+                                                                           tuple(arrival), spc,
+                                                                           dates, return_list, total))
             jobs.append(p)
             jobs[len(jobs)-1].start()
         for j in jobs:
@@ -398,8 +441,9 @@ class Calibration(object):
         if shrink:
             print('Shrink')
             shrink_list = self.calculate_shrinks(values_list=best_values, n_relevant=n_relevant,
-                                                 real_case=real_case, real_death=real_death, dates=dates,
-                                                 total=total, delta=delta)
+                                                 real_seroprevalence=real_seroprevalence,
+                                                 real_case=real_case, real_death=real_death, weights=pen_weights,
+                                                 dates=dates, total=total, delta=delta)
             for i in range(n_relevant):
                 best_values[i + 1] = shrink_list[i]
         else:
@@ -410,14 +454,14 @@ class Calibration(object):
         best_values = best_values.to_dict(orient='index')
         return {'values': best_values, 'shrink': shrink}
 
-    def calculate_shrinks(self, values_list: list, n_relevant: int, real_case: np.array, real_death: np.array,
-                          dates: dict, total: bool = True, delta: float = 0.5):
+    def calculate_shrinks(self, values_list: list, n_relevant: int, real_seroprevalence: dict, real_case: np.array,
+                          real_death: np.array, dates: dict, weights: tuple, total: bool = True, delta: float = 0.5):
         np_best_point = np.array([values_list[0]['beta'], values_list[0]['dc'], values_list[0]['arrival'],
                                   np.ones(6) * values_list[0]['spc']])
         manager = multiprocessing.Manager()
         return_list = manager.list()
         jobs = list()
-        cores = multiprocessing.cpu_count() - 1
+        cores = multiprocessing.cpu_count()
         for i in range(n_relevant):
             np_point = np.array([values_list[i + 1]['beta'], values_list[i + 1]['dc'], values_list[i + 1]['arrival'],
                                  np.ones(6) * values_list[i + 1]['spc']])
@@ -426,9 +470,10 @@ class Calibration(object):
             dc = tuple(shrink_point[1, :].tolist())
             arrival = tuple(shrink_point[2, :].tolist())
             spc = float(shrink_point[3, 0])
-            p = multiprocessing.Process(target=self.calculate_point, args=(real_case, real_death, tuple(beta),
-                                                                           tuple(dc), tuple(arrival), spc, dates,
-                                                                           return_list, total))
+            p = multiprocessing.Process(target=self.calculate_point, args=(real_seroprevalence, real_case, real_death,
+                                                                           weights, tuple(beta), tuple(dc),
+                                                                           tuple(arrival), spc,
+                                                                           dates, return_list, total))
             if len(jobs) < cores:
                 jobs.append(p)
                 jobs[len(jobs)-1].start()

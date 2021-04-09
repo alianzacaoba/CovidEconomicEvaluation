@@ -146,12 +146,11 @@ class MainRun(object):
                          name: str = 'no vac'):
         self.model_ex.run(self.type_paramsA, name, 'no_vaccination', c_beta_base, c_death_base, c_arrival_base, spc,
                           None, None, None, None, None, (365 * 3), 'csv', False)
-        df = pd.read_csv(DIR_OUTPUT + name + '.csv')
+        df = pd.read_csv(DIR_OUTPUT + 'result_' + name + '.csv')
         df['Date'] = df['day'].apply(lambda x: datetime.datetime(2020, 2, 21) + datetime.timedelta(days=x))
         df.drop(columns='day', inplace=True)
-        df2 = df[['Date', 'Department', 'Health', 'Work', 'Age', 'Susceptible', 'Exposed', 'Asymptomatic',
-                  'Recovered_Asymptomatic', 'Presymptomatic', 'Symptomatic', 'Home', 'Future_Recovered_Home',
-                  'Hospitalization', 'Future_Recovered_Hospitalization', 'ICU', 'Future_Recovered_ICU', 'Recovered',
+        df2 = df[['Date', 'Department', 'Health', 'Work', 'Age', 'Susceptible', 'Exposed', 'Presymptomatic',
+                  'Symptomatic', 'Home', 'Hospitalization', 'ICU', 'In_recovery', 'Asymptomatic', 'Recovered', 'Immune',
                   'Death']]
         df2 = df2.drop(columns=['Department', 'Health', 'Work', 'Age']).groupby('Date').sum().reset_index(drop=False)
         df2 = pd.melt(df2, id_vars=['Date'], var_name='Health_State', value_name='Population')
@@ -160,7 +159,7 @@ class MainRun(object):
         sns.lineplot(data=df2, x='Date', y='Population', hue='Health_State', style='Health_State', ax=ax)
         plt.legend(bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
         fig.savefig(DIR_OUTPUT + name + '.pdf')
-        df_compare = pd.read_csv(DIR_INPUT + name + 'death_cases.csv')
+        df_compare = pd.read_csv(DIR_INPUT + 'death_cases.csv')
         df_compare['Real_Deaths'] = \
             df_compare[['TOTAL_1', 'TOTAL_2', 'TOTAL_3', 'TOTAL_4', 'TOTAL_5', 'TOTAL_6']].sum(axis=1)
         df_compare.rename(columns={'DATE': 'Date'}, inplace=True)
@@ -175,7 +174,6 @@ class MainRun(object):
         df_simulation_compare = df[['Date', 'Cases', 'Death']].groupby(['Date']).sum()
         df_compare = pd.concat([df_compare, df_simulation_compare], axis=1, join='inner').reset_index(drop=False)
         df_compare.rename(columns={'Death': 'Simulated_Deaths', 'Cases': 'Simulated_Cases'}, inplace=True)
-        df_compare[['Date', 'Real_Deaths', 'Simulated_Deaths']].to_csv('DeathComparison.csv', index=False)
         ax = df_compare[['Date', 'Real_Cases', 'Simulated_Cases']].plot(kind='line', x='Date',
                                                                     title='Comparison of Cases Error', figsize=(10, 5))
         ax.set_ylabel('Cases')

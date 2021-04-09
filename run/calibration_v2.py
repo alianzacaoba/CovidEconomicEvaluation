@@ -54,7 +54,7 @@ while n_changed < 2:
                                       arrival_range=[c_arrival_inf, c_arrival_base, c_arrival_sup],
                                       dates={'days_cases': days_cases, 'days_deaths': days_deaths}, total=c_total,
                                       iteration=10000+n_iteration, max_no_improvement=50,
-                                      min_value_to_iterate=1000)
+                                      min_value_to_iterate=1000, weights=[1, 1, 1])
     print(' End of cycle: ', n_iteration)
     print(' New error:', calibration_model.ideal_values['error'])
     print(' Previous errors:', previous_error)

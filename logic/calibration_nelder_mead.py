@@ -13,8 +13,16 @@ from root import DIR_INPUT, DIR_OUTPUT
 
 
 def chunks(lv, nv):
-    for i in range(0, len(lv), nv):
-        yield lv[i:i + nv]
+    sets = []
+    n_list = []
+    for i in lv:
+        n_list.append(i)
+        if len(n_list) == nv:
+            sets.append(n_list.copy())
+            n_list = []
+    if len(n_list) > 0:
+        sets.append(n_list)
+    return sets
 
 
 class Calibration(object):
@@ -97,8 +105,9 @@ class Calibration(object):
                 else:
                     try:
                         dc.append(self.ideal_values['dc'][reg]*new_point['beta'][reg]/self.ideal_values['beta'][reg])
-                    except:
+                    except Exception as exc:
                         dc.append(new_point['dc'][reg])
+                        print(exc)
                 changed = True
             else:
                 beta.append(self.ideal_values['beta'][reg])

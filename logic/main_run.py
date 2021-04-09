@@ -3,10 +3,12 @@ from logic.model import Model
 import pandas as pd
 import time
 import datetime
+import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from root import DIR_INPUT, DIR_OUTPUT
 
+matplotlib.use('Agg')
 
 class MainRun(object):
 

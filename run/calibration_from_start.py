@@ -10,9 +10,6 @@ from root import DIR_OUTPUT
 import threading
 from threading import Thread, Lock
 
-print("A")
-
-
 class ThreadCalibrator(Thread):
     __lock = Lock()
 
@@ -117,20 +114,16 @@ class ThreadCalibrator(Thread):
               'exported')
         model_run.run(c_beta_base, c_death_base, c_arrival_base, c_spc_base)
 
-
-print("B")
-
 weight_set = [(100, 10, 1), (10, 5, 1), (1, 1, 1), (1, 5, 10)]
 worker = dict()
-max_parallel = 1
+max_parallel = 2
 initial_threads = threading.active_count()
 max_threads = initial_threads + max_parallel
-print("C")
 for w in weight_set:
-    while threading.active_count() == max_threads:
+    while threading.active_count() >= max_threads:
         time.sleep(1)
     worker[w] = ThreadCalibrator(weights=w)
     worker[w].start()
-    print("D")
-while threading.active_count > initial_threads:
+while threading.active_count() > initial_threads:
     time.sleep(1)
+

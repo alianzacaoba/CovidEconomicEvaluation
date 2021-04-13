@@ -10,6 +10,7 @@ from root import DIR_OUTPUT
 import threading
 from threading import Thread, Lock
 
+
 class ThreadCalibrator(Thread):
     __lock = Lock()
 
@@ -21,13 +22,13 @@ class ThreadCalibrator(Thread):
         weights = self.weights
         start_processing_s_t = time.process_time()
         start_time_t = datetime.datetime.now()
-        c_beta_inf = np.ones(6)*0.0001
-        c_beta_base = (0.022007606119173795, 0.017863980243733434, 0.018196130566806898, 0.018457626077325776,
-                       0.01748616435199459, 0.016227115077950355)
-        c_beta_sup = np.ones(6)*0.5
-        c_death_inf = np.ones(6)*0.1
-        c_death_base = np.ones(6)*0.25
-        c_death_sup = np.ones(6)*1
+        c_beta_inf = np.ones(6)*0.00001
+        c_beta_base = np.ones(6)*0.0015 #(0.022007606119173795, 0.017863980243733434, 0.018196130566806898, 0.018457626077325776,
+                       #0.01748616435199459, 0.016227115077950355)
+        c_beta_sup = np.ones(6)*0.001
+        c_death_inf = np.ones(6)*0.005
+        c_death_base = np.ones(6)*0.05
+        c_death_sup = np.ones(6)*0.2
         c_arrival_inf = np.ones(6)*1.0
         c_arrival_base = (15.610984192361858, 7.118033263153407, 13.580052334837838, 6.872622856121195,
                           19.179202373513895, 23.821317070305813)
@@ -114,9 +115,10 @@ class ThreadCalibrator(Thread):
               'exported')
         model_run.run(c_beta_base, c_death_base, c_arrival_base, c_spc_base)
 
+
 weight_set = [(100, 10, 1), (10, 5, 1), (1, 1, 1), (1, 5, 10)]
 worker = dict()
-max_parallel = 2
+max_parallel = 1
 initial_threads = threading.active_count()
 max_threads = initial_threads + max_parallel
 for w in weight_set:
@@ -126,4 +128,3 @@ for w in weight_set:
     worker[w].start()
 while threading.active_count() > initial_threads:
     time.sleep(1)
-

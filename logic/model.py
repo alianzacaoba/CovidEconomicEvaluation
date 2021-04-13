@@ -1,3 +1,4 @@
+import math
 from typing import List, Any
 from logic.compartment import Compartment
 import pandas as pd
@@ -25,34 +26,35 @@ spc_f = 0.2761426379037166
 # error : 0.03471753964393546
 
 
-def calculate_vaccine_assignments(department_population: dict, day: int, vaccine_priority: list,
-                                  vaccine_capacity: float, candidates_indexes: list, non_candidates_indexes: list):
-    remaining_vaccines = vaccine_capacity
-    assignation = dict()
-    for groups in vaccine_priority:
-        if remaining_vaccines > 0.0:
-            candidates = list()
-            for group in groups:
-                ev, wv, hv, percent = group
-                if percent == 1:
-                    candidates[(ev, wv, hv)] = sum(department_population[ev][wv][hv][cv].values[day]
-                                                 for cv in candidates_indexes)
-                else:
-                    candidates[(ev, wv, hv)] = max(percent*sum(department_population[ev][wv][hv][cv].values[day]
-                                                             for cv in candidates_indexes)
-                                                 - (percent-1) * sum(department_population[ev][wv][hv][cv].values[day]
-                                                     for cv in non_candidates_indexes), 0.0)
-            given_vaccines = min(remaining_vaccines, sum(candidates.values()))
-            remaining_vaccines -= given_vaccines
-            for group in groups:
-                ev, wv, hv, percent = group
-                assignation[(ev, wv, hv)] = given_vaccines*candidates[(ev, wv, hv)] /\
-                                          (sum(candidates.values()) *
-                                           sum(department_population[ev][wv][hv][cv].values[day]
-                                               for cv in candidates_indexes))
+def create_vaccine_assignation(start_date: int, end_date: int, vaccines_information: dict):
+    """
+    Creates the daily vaccine assignation considering a time period and the required information to determine dosage.
+    :param start_date: Starting date of the vaccination program.
+    :param end_date: End date of the vaccination program (time to reach the limit).
+    :param vaccines_information: Considers the information of each vaccine ordered by name: 1) total_doses considered,
+    2) period between first and second dose.
+    :return: dictionary with the vaccine time assignation.
+    """
+    result_information = dict()
+    for day in range(start_date, end_date + 1):
+        result_information[day] = dict()
+    time_period = end_date - start_date + 1
+    for v in vaccines_information.keys():
+        # v is the name of the vaccine
+        vac_info = vaccines_information[v]
+        total_number = vac_info['total_doses']
+        inter_dose_time = vac_info['inter_dose_time']
+        if inter_dose_time == 0:
+            daily_number = total_number/time_period
+            for day in range(start_date, end_date+1):
+                result_information[day][v] = ['V0', daily_number]
         else:
-            return assignation
-    return assignation
+            total_individuals = total_number / 2
+            daily_number = total_individuals/(time_period-inter_dose_time)
+            for day in range(start_date, end_date + 1 - inter_dose_time):
+                result_information[day][v+str(1)] = ['V0', daily_number]
+                result_information[day+inter_dose_time][v + str(2)] = [v+str(1), daily_number]
+    return result_information
 
 
 class Model(object):
@@ -148,26 +150,39 @@ class Model(object):
 
     def run(self, type_params: dict, name: str = 'Iteration', run_type: str = 'vaccination',
             beta: tuple = beta_f, death_coefficient: tuple = dc_f, arrival_coefficient: tuple = arrival_f,
-            symptomatic_coefficient: float = spc_f, vaccine_priority: list = None, vaccine_capacities: dict = None,
-            vaccine_effectiveness: dict = None, vaccine_start_day: dict = None, vaccine_end_day: dict = None,
-            sim_length: int = 365*3, export_type: list = None, use_tqdm: bool = False, t_lost_inm: int = 0):
+            symptomatic_coefficient: float = spc_f, vaccine_priority: list = None, vaccine_information: dict = None,
+            vaccine_start_days: dict = None, vaccine_end_days: dict = None, sim_length: int = 365*3,
+            export_type: list = None, use_tqdm: bool = False, t_lost_inm: int = 0):
 
         # run_type:
         #   1) 'calibration': no vaccination status - returns the daily results of measurement (cases, deaths,
         #   seroprevalence)
         #   2) 'vaccination': model with vaccine states - requires the vaccines information characteristics.
         #   3) 'non-vaccination': model without vaccines - [0V] is the only vaccination states
-        # SU, E, A, R_A, P, Sy, C, H, I, R, D, Cases
+        # vaccine_information debe_tener {'vacuna':{'total_doses', 'inter_dose_time', 'effectivity',
+        # 'symptomatic_prob_reduction'}}
         # export_type = {'all', 'json', 'csv', 'xlsx'}
+        vaccine_start_day = sim_length +5
+        vaccine_end_day = sim_length +6
+        if vaccine_start_days is not None and vaccine_end_days is not None:
+            vaccine_start_day = vaccine_start_days[type_params['vaccine_day']]
+            vaccine_end_day = vaccine_end_days[type_params['vaccine_day']]
+        if vaccine_information is not None:
+            for vac in vaccine_information:
+                vaccine_information[vac]['dose_effectivity'] = 1-math.sqrt(1-vaccine_information[vac]['effectivity'])
         export_type = ['csv'] if export_type is None else export_type
-
+        vaccination_calendar = create_vaccine_assignation(start_date=vaccine_start_day, end_date=vaccine_end_day,
+                                                          vaccines_information=vaccine_information) \
+            if run_type == 'vaccination' else None
         population = dict()
         departments = self.departments
         age_groups = self.age_groups
         work_groups = self.work_groups
         health_groups = self.health_groups
-        vaccination_groups = ['V0', 'P1', 'P2', 'J', 'S1', 'S2', 'M1', 'M2', 'A1', 'A2'] \
+        vaccination_groups = ['V0', 'P1', 'P2', 'J', 'S1', 'S2', 'M1', 'M2', 'A1', 'A2', 'R'] \
             if run_type == 'vaccination' else ['V0']
+        vaccination_candidates = ['V0', 'P1', 'S1', 'M1', 'A1'] if run_type == 'vaccination' else None
+
         daly_vector = dict()
         for dv in self.daly_vector:
             daly_vector[dv] = self.daly_vector[dv][type_params['daly']]
@@ -186,31 +201,83 @@ class Model(object):
         p_c_d = dict()
         p_h_d = dict()
         p_i_d = dict()
-
         for ev in age_groups:
             t_d[ev] = self.time_params[('t_d', ev)][type_params['t_d']]
             t_r[ev] = max(self.time_params[('t_r', ev)][type_params['t_r']] - t_d[ev], 1)
-            p_s[ev] = min(self.prob_params[('p_s', ev, 'ALL')][type_params['p_s']]*symptomatic_coefficient, 1.0)
+            p_s[('V0', ev)] = min(self.prob_params[('p_s', ev, 'ALL')][type_params['p_s']]*symptomatic_coefficient, 1.0)
             for hv in health_groups:
-                p_c[(ev, hv)] = self.prob_params[('p_c', ev, hv)][type_params['p_c']]
-                p_h[(ev, hv)] = self.prob_params[('p_h', ev, hv)][type_params['p_h']]
-                p_i[(ev, hv)] = 1 - p_c[(ev, hv)] - p_h[(ev, hv)]
+                p_c[(ev, 'V0', hv)] = self.prob_params[('p_c', ev, hv)][type_params['p_c']]
+                p_h[(ev, 'V0', hv)] = self.prob_params[('p_h', ev, hv)][type_params['p_h']]
+                p_i[(ev, 'V0', hv)] = 1 - p_c[(ev, 'V0', hv)] - p_h[(ev, 'V0', hv)]
                 for gv in departments:
                     cur_region = self.regions[gv] - 1
-                    p_c_d[(gv, ev, hv)] = min(death_coefficient[cur_region] *
+                    p_c_d[(gv, ev, 'V0', hv)] = min(death_coefficient[cur_region] *
                                               self.prob_params[('p_c_d', ev, hv)][type_params['p_c_d']], 1.0)
-                    p_h_d[(gv, ev, hv)] = min(death_coefficient[cur_region] *
+                    p_h_d[(gv, ev, 'V0', hv)] = min(death_coefficient[cur_region] *
                                               self.prob_params[('p_h_d', ev, hv)][type_params['p_h_d']], 1.0)
-                    p_i_d[(gv, ev, hv)] = min(death_coefficient[cur_region] *
+                    p_i_d[(gv, ev, 'V0', hv)] = min(death_coefficient[cur_region] *
                                               self.prob_params[('p_i_d', ev, hv)][type_params['p_i_d']], 1.0)
+        if run_type == 'vaccination':
+            for ev in age_groups:
+                t_d[ev] = self.time_params[('t_d', ev)][type_params['t_d']]
+                t_r[ev] = max(self.time_params[('t_r', ev)][type_params['t_r']] - t_d[ev], 1)
+                p_s[('R', ev)] = min(self.prob_params[('p_s', ev, 'ALL')][type_params['p_s']] * symptomatic_coefficient,
+                                     1.0)
+                for hv in health_groups:
+                    p_c[(ev, 'R', hv)] = self.prob_params[('p_c', ev, hv)][type_params['p_c']]
+                    p_h[(ev, 'R', hv)] = self.prob_params[('p_h', ev, hv)][type_params['p_h']]
+                    p_i[(ev, 'R', hv)] = 1 - p_c[(ev, 'R', hv)] - p_h[(ev, 'R', hv)]
+                    for gv in departments:
+                        cur_region = self.regions[gv] - 1
+                        p_c_d[(gv, ev, 'R', hv)] = min(death_coefficient[cur_region] *
+                                                       self.prob_params[('p_c_d', ev, hv)][type_params['p_c_d']], 1.0)
+                        p_h_d[(gv, ev, 'R', hv)] = min(death_coefficient[cur_region] *
+                                                       self.prob_params[('p_h_d', ev, hv)][type_params['p_h_d']], 1.0)
+                        p_i_d[(gv, ev, 'R', hv)] = min(death_coefficient[cur_region] *
+                                                       self.prob_params[('p_i_d', ev, hv)][type_params['p_i_d']], 1.0)
+            for vv in ['P2', 'J', 'S2', 'M2', 'A2']:  # Half process
+                for ev in age_groups:
+                    p_s[(vv, ev)] = p_s[('V0', ev)] * (1 - vaccine_information[vv[0]].get('symptomatic_prob_reduction',
+                                                                                          0))
+            for vv in ['P1', 'S1', 'M1', 'A1']:  # Half process
+                for ev in age_groups:
+                    p_s[(vv, ev)] = (p_s[('V0', ev)] + p_s[(vv[0] + str(2), ev)]) / 2
+            for ev in age_groups:
+                for hv in health_groups:
+                    for vv in ['P2', 'J', 'S2', 'M2', 'A2']:  # Half process
+                        p_i[(ev, vv, hv)] = p_i[(ev, 'V0', hv)] * vaccine_information[vv[0]].get('icu_prob_reduction',
+                                                                                                 1)
+                        p_h[(ev, vv, hv)] = p_h[(ev, 'V0', hv)] * vaccine_information[vv[0]].get('hosp_prob_reduction',
+                                                                                                 1)
+                        p_c[(ev, vv, hv)] = 1 - p_i[(ev, vv, hv)] - p_h[(ev, vv, hv)]
+                        for gv in departments:
+                            p_c_d[(gv, ev, vv, hv)] = p_c_d[(gv, ev, 'V0', hv)] *\
+                                                      vaccine_information[vv[0]].get('home_death_reduction', 1)
+                            p_h_d[(gv, ev, vv, hv)] = p_h_d[(gv, ev, 'V0', hv)] *\
+                                                      vaccine_information[vv[0]].get('hosp_death_reduction', 1)
+                            p_i_d[(gv, ev, vv, hv)] = p_i_d[(gv, ev, 'V0', hv)] *\
+                                                      vaccine_information[vv[0]].get('icu_death_reduction', 1)
+                    for vv in ['P1', 'S1', 'M1', 'A1']:  # Half process
+                        p_i[(ev, vv, hv)] = (p_i[(ev, 'V0', hv)]+p_i[(ev, vv[0]+str(2), hv)])/2
+                        p_h[(ev, vv, hv)] = (p_h[(ev, 'V0', hv)] + p_h[(ev, vv[0] + str(2), hv)]) / 2
+                        p_c[(ev, vv, hv)] = 1 - p_i[(ev, vv, hv)] - p_h[(ev, vv, hv)]
+                        for gv in departments:
+                            p_c_d[(gv, ev, vv, hv)] = (p_c_d[(gv, ev, 'V0', hv)] + p_c_d[(gv, ev, vv[0]+str(2), hv)])/2
+                            p_h_d[(gv, ev, vv, hv)] = (p_h_d[(gv, ev, 'V0', hv)] + p_h_d[(gv, ev, vv[0]+str(2), hv)])/2
+                            p_i_d[(gv, ev, vv, hv)] = (p_i_d[(gv, ev, 'V0', hv)] + p_i_d[(gv, ev, vv[0]+str(2), hv)])/2
 
         # 0) SU, 1) E, 2) P, 3) SYM, 4) C, 5) HOS, 6) ICU, 7) R_S, 8) A, 9) R, 10) I, 11) Death
         # 12) Cases, 13) Seroprevalence 14) Total_pob
         i_1_indexes = [2, 3, 4, 7, 10]
         i_2_indexes = [5, 6]
-        candidates_indexes = [0, 1, 9, 10, 11]
+        candidates_indexes = [0, 1, 8, 10]
         alive_compartments = list(range(12))
-        non_candidate_indexes = list(set(alive_compartments)-set(candidates_indexes))
+        percentages = dict()
+        if vaccine_priority is not None:
+            for phase in vaccine_priority:
+                for group in phase:
+                    percentages[group] = phase[group]
+
         for gv in departments:
             population_g = dict()
             for ev in age_groups:
@@ -220,7 +287,10 @@ class Model(object):
                     for hv in health_groups:
                         population_h = dict()
                         for vv in vaccination_groups:
-                            first_value = self.initial_population[(gv, ev, wv, hv)] if vv == 'V0' else 0
+                            first_value = self.initial_population[(gv, ev, wv, hv)] if vv in ['V0', 'R'] else 0
+                            if run_type == 'vaccination':
+                                p = percentages.get((ev, wv, hv), 0)
+                                first_value *= p if vv == 'V0' else 1-p
                             compartments = list()
                             su = Compartment(name='Susceptible', initial_value=first_value * initial_sus)
                             compartments.append(su)
@@ -257,6 +327,7 @@ class Model(object):
                     population_e[wv] = population_w
                 population_g[ev] = population_e
             population[gv] = population_g
+
         iterator = tqdm(range(sim_length)) if use_tqdm else range(sim_length)
         for t in iterator:
             dep_pob = dict()
@@ -274,9 +345,9 @@ class Model(object):
                                     print(exc)
                                     return
 
+            # Modelo epidemiológico primero
             for gv in departments:
                 cur_region = self.regions[gv]-1
-                # Modelo epidemiológico primero
                 i_1 = list()
                 i_2 = list()
                 dep_pob[gv] = 0.0
@@ -316,7 +387,6 @@ class Model(object):
                     else:
                         i_1.append(0.0)
                         i_2.append(0.0)
-
                 for ev in age_groups:
                     contacts = np.zeros(len(age_groups))
                     for cv in self.contact_matrix:
@@ -324,7 +394,6 @@ class Model(object):
                                     * np.array(self.contact_matrix[cv][ev])
                     for wv in work_groups:
                         for hv in health_groups:
-                            # First epidemics dynamics
                             for vv in vaccination_groups:
                                 # Bring relevant population
                                 su, e, p, sy, c, h, i, r_s, a, r, inm, d, cases, seroprevalence, total_pob \
@@ -365,31 +434,31 @@ class Model(object):
                                              cur_pob / dep_pob[gv]) if self.arrival_rate['START_DAY'][gv] <= t <=
                                                                        self.arrival_rate['END_DAY'][gv] else 0.0),
                                            -finished_exposed}
-                                dp_dt = {finished_exposed * p_s[ev],
+                                dp_dt = {finished_exposed * p_s[(vv, ev)],
                                           -finished_presymptomatic}
                                 dsy_dt = {finished_presymptomatic,
                                            -define_treatment}
-                                dc_dt = {define_treatment * p_c[(ev, hv)],
+                                dc_dt = {define_treatment * p_c[(ev, vv, hv)],
                                           -home_death_threshold}
-                                dh_dt = {define_treatment * p_h[(ev, hv)],
+                                dh_dt = {define_treatment * p_h[(ev, vv, hv)],
                                           -hosp_death_threshold}
-                                di_dt = {define_treatment * p_i[(ev, hv)],
+                                di_dt = {define_treatment * p_i[(ev, vv, hv)],
                                           -icu_death_threshold}
-                                dr_s_dt = {home_death_threshold*(1 - p_c_d[(gv, ev, hv)]),
-                                            hosp_death_threshold*(1-p_h_d[(gv, ev, hv)]),
-                                            icu_death_threshold*(1-p_i_d[(gv, ev, hv)]),
+                                dr_s_dt = {home_death_threshold*(1 - p_c_d[(gv, ev, vv, hv)]),
+                                            hosp_death_threshold*(1-p_h_d[(gv, ev, vv, hv)]),
+                                            icu_death_threshold*(1-p_i_d[(gv, ev, vv, hv)]),
                                             -new_recovered}
-                                da_dt = {finished_exposed * (1-p_s[ev]),
+                                da_dt = {finished_exposed * (1-p_s[(vv, ev)]),
                                           -asymptomatic_recovery}
                                 dr_dt = {new_recovered,
                                           -new_immune}
                                 dinm_dt = {asymptomatic_recovery,
                                            new_immune,
                                            -lost_immunity}
-                                dd_dt = {home_death_threshold*p_c_d[(gv, ev, hv)],
-                                          hosp_death_threshold*p_h_d[(gv, ev, hv)],
-                                          icu_death_threshold*p_i_d[(gv, ev, hv)]}
-                                dcases_dt = {finished_exposed * p_s[ev]}
+                                dd_dt = {home_death_threshold*p_c_d[(gv, ev, vv, hv)],
+                                         hosp_death_threshold*p_h_d[(gv, ev, vv, hv)],
+                                         icu_death_threshold*p_i_d[(gv, ev, vv, hv)]}
+                                dcases_dt = {finished_exposed * p_s[(vv, ev)]}
                                 dseroprevalence_dt = {finished_exposed}
 
                                 su.values[t + 1] = cur_su + float(sum(dsu_dt))
@@ -410,8 +479,49 @@ class Model(object):
                                                         sy.values[t + 1] + c.values[t + 1] + h.values[t + 1] + \
                                                         i.values[t + 1] + r_s.values[t + 1] + a.values[t + 1] + \
                                                         r.values[t + 1] + inm.values[t + 1] + d.values[t + 1]
-                # Demographics / Health degrees
-                if run_type != 'calibration':
+            # Vaccination dynamics
+            if vaccine_start_day <= t <= vaccine_end_day:
+                vaccine_capacity = vaccination_calendar[t]
+                assignation = self.calculate_vaccine_assignments(population=population, day=t,
+                                                                 vaccine_priority=vaccine_priority,
+                                                                 vaccine_capacity=vaccine_capacity,
+                                                                 candidates_indexes=candidates_indexes,
+                                                                 vaccination_candidates=vaccination_candidates)
+                for gv in self.departments:
+                    for ev in self.age_groups:
+                        for wv in self.work_groups:
+                            for hv in self.health_groups:
+                                for i_vv in vaccination_candidates:
+                                    for o_vv in vaccination_calendar[t].keys():
+                                        # Susceptible:
+                                        assigned_s = assignation.get([(gv, ev, wv, hv, i_vv, 0, o_vv)], 0)
+                                        assigned_e = assignation.get([(gv, ev, wv, hv, i_vv, 1, o_vv)], 0)
+                                        assigned_a = assignation.get([(gv, ev, wv, hv, i_vv, 8, o_vv)], 0)
+                                        assigned_im = assignation.get([(gv, ev, wv, hv, i_vv, 10, o_vv)], 0)
+                                        if assigned_s + assigned_e + assigned_a + assigned_im > 0:
+                                            d_i_su = {-assigned_s}
+                                            d_i_e = {-assigned_e}
+                                            d_i_a = {-assigned_a}
+                                            d_i_im = {-assigned_im}
+                                            d_o_su = {assigned_s*(1-vaccine_information[o_vv[0]]['dose_effectivity'])}
+                                            d_o_p = {assigned_e*p_s[(i_vv, ev)]}
+                                            d_o_a = {assigned_e*(1-p_s[(i_vv, ev)])}
+                                            d_o_im = {assigned_s*vaccine_information[o_vv[0]]['dose_effectivity'],
+                                                       assigned_a,
+                                                       assigned_im}
+                                            population[gv][ev][wv][hv][i_vv][0].values[t + 1] += sum(d_i_su)
+                                            population[gv][ev][wv][hv][i_vv][1].values[t + 1] += sum(d_i_e)
+                                            population[gv][ev][wv][hv][i_vv][8].values[t + 1] += sum(d_i_a)
+                                            population[gv][ev][wv][hv][i_vv][10].values[t + 1] += sum(d_i_im)
+
+                                            population[gv][ev][wv][hv][o_vv][0].values[t + 1] += sum(d_o_su)
+                                            population[gv][ev][wv][hv][o_vv][2].values[t + 1] += sum(d_o_p)
+                                            population[gv][ev][wv][hv][o_vv][8].values[t + 1] += sum(d_o_a)
+                                            population[gv][ev][wv][hv][o_vv][10].values[t + 1] += sum(d_o_im)
+
+            # Demographics / Health degrees
+            if run_type != 'calibration':
+                for gv in self.departments:
                     births = self.birth_rates[gv]*dep_pob[gv]
                     for state in alive_compartments:
                         previous_growing_o_s = births if state == 0 else 0.0
@@ -495,7 +605,7 @@ class Model(object):
                                 results_array[:, cur_region+6] += np.array(list(population[gv][ev][wv][hv][vv][11]
                                                                                 .values.values()),
                                                                            dtype=float)  # Deaths
-                                seroprevalence[cur_region] = seroprevalence.get(cur_region,0) + \
+                                seroprevalence[cur_region] = seroprevalence.get(cur_region, 0) + \
                                                              np.array(list(population[gv][ev][wv][hv][vv][13]
                                                                            .values.values()), dtype=float)
                                 # Seroprevalence n
@@ -600,3 +710,55 @@ class Model(object):
                     wb.save(DIR_OUTPUT + 'result_' + name + '.xlsx')
                     print('Excel ', DIR_OUTPUT + 'result_' + name + '.xlsx', 'exported')
             return pop_pandas
+
+    def calculate_vaccine_assignments(self, population: dict, day: int, vaccine_priority: list, vaccine_capacity: dict,
+                                      candidates_indexes: list, vaccination_candidates: list):
+        """
+        Calculates the daily vaccination assignments for every group.
+        :param population: Resulting population in the simulation.
+        :param day: Day to obtain information
+        :param vaccine_priority: list of priorities. Each group contains a list of tuples indicating the groups that
+        comprehend the priorities.
+        :param vaccine_capacity: dictionary with amount for each type of vaccine and target group.
+        :param candidates_indexes: indexes for states (infection related) that are candidates to the vaccine.
+        :param vaccination_candidates: States that are candidates to be vaccinated
+        :return:
+        """
+        day_population = dict()
+        total_candidates = dict()
+        assignation = dict()
+        for gv in self.departments:
+            for vv in vaccination_candidates:
+                total_candidates[(gv, vv)] = 0
+                for ev in self.age_groups:
+                    for wv in self.work_groups:
+                        for hv in self.health_groups:
+                            for cv in candidates_indexes:
+                                day_population[(gv, ev, wv, hv, vv, cv)] = population[gv][ev][wv][hv][vv][cv][day]
+                                total_candidates[(gv, vv)] += day_population[(gv, ev, wv, hv, vv, cv)]
+
+        for vaccine in vaccine_capacity:
+            # Diccionario con el siguiente orden: {'cual':[a_quien, cantidad]}
+            current_vac = vaccine_capacity[vaccine]
+            vv = current_vac[0]
+            vaccine_candidates = sum(total_candidates[(gv, vv)] for gv in self.departments)
+            vaccines_to_use = min(vaccine_candidates, current_vac[1])
+            for gv in self.departments:
+                vaccines_for_department = vaccines_to_use*total_candidates[(gv, vv)]/vaccine_candidates
+                total_candidates[(gv, vv)] -= vaccines_for_department
+                # Van en el orden de las listas
+                for groups in vaccine_priority:
+                    # group = [[ev, wv, hv]]
+                    group_candidates = 0
+                    for group in groups:
+                        ev, wv, hv = group
+                        group_candidates += sum(day_population[(gv, ev, wv, hv, vv, cv)] for cv in candidates_indexes)
+                    vaccines_for_group = min(vaccines_for_department, group_candidates)
+                    vaccines_for_department -= vaccines_for_group
+                    for group in groups:
+                        ev, wv, hv = group
+                        for cv in candidates_indexes:
+                            assignation[(gv, ev, wv, hv, vv, cv, vaccine)] = day_population[(gv, ev, wv, hv, vv, cv)] /\
+                                                                             vaccines_for_group
+                            day_population[(gv, ev, wv, hv, vv, cv)] -= assignation[(gv, ev, wv, hv, vv, cv)]
+        return assignation

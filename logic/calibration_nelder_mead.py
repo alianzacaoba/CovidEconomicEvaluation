@@ -239,8 +239,9 @@ class Calibration(object):
         for iv in self.ideal_values:
             print(' ', iv, ":", self.ideal_values[iv])
         best_results = pd.DataFrame(self.current_results)
-        best_results.drop_duplicates(ignore_index=True)
-        best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(dimensions+1)
+        best_results.drop_duplicates()
+        best_results = best_results.sort_values(by='error', ascending=True).head(dimensions+1)
+        best_results.reset_index(inplace=True, drop=True)
         best_results = best_results.to_dict(orient='index')
         if self.ideal_values['error'] < min_value_to_iterate:
             it = initial_cases
@@ -290,9 +291,9 @@ class Calibration(object):
                         if v_new not in self.results:
                             self.results.append(v_new)
 
-                best_results = pd.DataFrame(self.current_results).drop_duplicates(ignore_index=True)
-                best_results = best_results.sort_values(by='error', ascending=True, ignore_index=True).head(
-                    dimensions + 1)
+                best_results = pd.DataFrame(self.current_results).drop_duplicates()
+                best_results = best_results.sort_values(by='error', ascending=True).head(dimensions + 1)
+                best_results.reset_index(inplace=True, drop=True)
                 best_results = best_results.to_dict(orient='index')
                 n_no_changes = 0 if round(self.ideal_values['error'], error_precision) < \
                                     round(best_error, error_precision) else n_no_changes + 1
@@ -318,7 +319,8 @@ class Calibration(object):
             organized_result['error_deaths'] = current['error_deaths']
             organized_result['error'] = current['error']
             organized_results.append(organized_result)
-        results_pd = pd.DataFrame(organized_results).drop_duplicates(ignore_index=True)
+        results_pd = pd.DataFrame(organized_results).drop_duplicates()
+        results_pd.reset_index(inplace=True, drop=True)
         file_name = DIR_OUTPUT + 'calibration_nm_results_' + 'W_' + str(weights[0]) + '_' + str(weights[1]) + '_' + \
                     str(weights[2]) + \
                     ' ' + ('total' if total else 'new') + str(iteration)
@@ -459,8 +461,9 @@ class Calibration(object):
         else:
             for job in return_list:
                 best_values[len(best_values)] = job
-        best_values = pd.DataFrame(best_values).T.drop_duplicates(ignore_index=True)
-        best_values = best_values.sort_values(by='error', ascending=True, ignore_index=True).head(n_relevant + 1)
+        best_values = pd.DataFrame(best_values).T.drop_duplicates()
+        best_values = best_values.sort_values(by='error', ascending=True).head(n_relevant + 1)
+        best_values.reset_index(inplace=True, drop=True)
         best_values = best_values.to_dict(orient='index')
         return {'values': best_values, 'shrink': shrink}
 

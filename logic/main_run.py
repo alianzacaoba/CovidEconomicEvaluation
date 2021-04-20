@@ -7,6 +7,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from root import DIR_INPUT, DIR_OUTPUT
+from tqdm import tqdm
 
 matplotlib.use('Agg')
 
@@ -38,14 +39,13 @@ class MainRun(object):
         self.total_sim_length = 365*3
         self.vaccine_start_days = {'INF_VALUE': 377, 'BASE_VALUE': 419, 'MAX_VALUE': 480}
         self.vaccine_end_days = {'INF_VALUE': 682, 'BASE_VALUE': 724, 'MAX_VALUE': 785}
-        self.n_vaccine_days = 305
         self.type_paramsA['daly'] = 'BASE_VALUE'
         self.type_paramsA['cost'] = 'BASE_VALUE'
         self.type_paramsA['vaccine_day'] = 'BASE_VALUE'
 
-    def run(self, c_beta_base: tuple, c_death_base: tuple, c_arrival_base: tuple, spc: float):
+    def run(self, c_beta_base: tuple, c_death_base: tuple, c_arrival_base: tuple, spc: float, sensitivity: bool = True):
         jobs = list()
-        cores = multiprocessing.cpu_count() - 1
+        cores = 3 #int(multiprocessing.cpu_count()/2) - 1
         # PARAMETERS:
         # type_params: dict,
         # name: str = 'Iteration',
@@ -63,12 +63,13 @@ class MainRun(object):
         # export_type: list = None,
         # use_tqdm: bool = False,
         # t_lost_inm: int = 0
-        p = multiprocessing.Process(target=self.model_ex.run, args=(self.type_paramsA, 'no_vac', 'no_vaccination',
+        '''p = multiprocessing.Process(target=self.model_ex.run, args=(self.type_paramsA, 'no_vac', 'no_vaccination',
                                                                     c_beta_base, c_death_base, c_arrival_base, spc,
                                                                     None, None, None, None, self.total_sim_length,
                                                                     'csv', False, 0))
         jobs.append(p)
         jobs[0].start()
+        print('Start no vac', datetime.datetime.now())'''
         for pvs in self.priority_vaccine_scenarios:
             c_name = 'vac_priority_' + pvs
             p = multiprocessing.Process(target=self.model_ex.run,
@@ -76,7 +77,7 @@ class MainRun(object):
                                               c_death_base, c_arrival_base, spc,
                                               self.priority_vaccine_scenarios[pvs],
                                               self.vaccine_information, self.vaccine_start_days,
-                                              self.vaccine_end_days, self.total_sim_length, 'csv', False))
+                                              self.vaccine_end_days, self.total_sim_length, 'csv', True))
             available = False
             while not available:
                 n_count = 0
@@ -84,43 +85,24 @@ class MainRun(object):
                     if jobs[j].is_alive():
                         n_count += 1
                 if n_count < cores:
-                    print(c_name)
                     available = True
                     jobs.append(p)
                     jobs[len(jobs) - 1].start()
+                    print('Start', c_name, datetime.datetime.now())
                 else:
                     time.sleep(1)
 
-        for pv in self.type_paramsA:
-            type_params_b = self.type_paramsA.copy()
-            for val in ['INF_VALUE', 'MAX_VALUE']:
-                type_params_b[pv] = val
-                c_name = 'sensitivity_' + pv + '_' + val + '_vac_priority_no_vac'
-                p = multiprocessing.Process(target=self.model_ex.run,
-                                            args=(type_params_b, c_name, 'no_vaccination', c_beta_base, c_death_base,
-                                                  c_arrival_base, spc, None, None, None, None, self.total_sim_length,
-                                                  'csv', False))
-                available = False
-                while not available:
-                    n_count = 0
-                    for j in range(len(jobs)):
-                        if jobs[j].is_alive():
-                            n_count += 1
-                    if n_count < cores:
-                        print(c_name)
-                        available = True
-                        jobs.append(p)
-                        jobs[len(jobs) - 1].start()
-                    else:
-                        time.sleep(1)
-
-                for pvs in self.priority_vaccine_scenarios:
-                    c_name = 'sensitivity_' + pv + '_' + val + '_vac_priority_' + pvs
+        if sensitivity:
+            params = list(self.type_paramsA.keys())
+            for pv in params:
+                type_params_b = self.type_paramsA.copy()
+                for val in ['INF_VALUE', 'MAX_VALUE']:
+                    type_params_b[pv] = val
+                    '''c_name = 'sensitivity_' + pv + '_' + val + '_vac_priority_no_vac'
                     p = multiprocessing.Process(target=self.model_ex.run,
-                                                args=(type_params_b, c_name, 'vaccination', c_beta_base, c_death_base,
-                                                      c_arrival_base, spc, self.priority_vaccine_scenarios[pvs],
-                                                      self.vaccine_information, self.vaccine_start_days,
-                                                      self.vaccine_end_days, self.total_sim_length, 'csv', False))
+                                                args=(type_params_b, c_name, 'no_vaccination', c_beta_base, c_death_base,
+                                                      c_arrival_base, spc, None, None, None, None, self.total_sim_length,
+                                                      'csv', True))
                     available = False
                     while not available:
                         n_count = 0
@@ -128,13 +110,32 @@ class MainRun(object):
                             if jobs[j].is_alive():
                                 n_count += 1
                         if n_count < cores:
-                            print(c_name)
                             available = True
                             jobs.append(p)
                             jobs[len(jobs) - 1].start()
+                            print('Start', c_name, datetime.datetime.now())
                         else:
-                            time.sleep(1)
-
+                            time.sleep(1)'''
+                    for pvs in self.priority_vaccine_scenarios:
+                        c_name = 'sensitivity_' + pv + '_' + val + '_vac_priority_' + pvs
+                        p = multiprocessing.Process(target=self.model_ex.run,
+                                                    args=(type_params_b, c_name, 'vaccination', c_beta_base, c_death_base,
+                                                          c_arrival_base, spc, self.priority_vaccine_scenarios[pvs],
+                                                          self.vaccine_information, self.vaccine_start_days,
+                                                          self.vaccine_end_days, self.total_sim_length, 'csv', True))
+                        available = False
+                        while not available:
+                            n_count = 0
+                            for j in range(len(jobs)):
+                                if jobs[j].is_alive():
+                                    n_count += 1
+                            if n_count < cores:
+                                available = True
+                                jobs.append(p)
+                                jobs[len(jobs) - 1].start()
+                                print('Start', c_name, datetime.datetime.now())
+                            else:
+                                time.sleep(1)
         available = False
         while not available:
             n_count = 0
@@ -147,10 +148,11 @@ class MainRun(object):
                 time.sleep(1)
         print('End process')
 
+
     def run_quality_test(self, c_beta_base: tuple, c_death_base: tuple, c_arrival_base: tuple, spc: float,
                          name: str = 'no vac'):
         self.model_ex.run(self.type_paramsA, name, 'no_vaccination', c_beta_base, c_death_base, c_arrival_base, spc,
-                          None, None, None, None, None, (365 * 3), 'csv', False)
+                          None, None, None, None, (365 * 3), 'csv', False)
         df = pd.read_csv(DIR_OUTPUT + 'result_' + name + '.csv')
         df['Date'] = df['day'].apply(lambda x: datetime.datetime(2020, 2, 21) + datetime.timedelta(days=x))
         df.drop(columns='day', inplace=True)

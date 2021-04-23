@@ -43,8 +43,7 @@ class Calibration(object):
         self.real_deaths = pd.read_csv(DIR_INPUT + 'death_cases.csv')
         self.real_seroprevalence = pd.read_csv(DIR_INPUT + 'seroprevalence.csv', index_col=0).to_dict('index')
         self.max_day = int(self.real_cases.SYM_DAY.max())
-        self.error_ratio = 10
-        self.error_power = 2
+        self.error_power = 4
 
     def calculate_point(self, real_seroprevalence: dict, real_case: np.array, real_death: np.array, weights: tuple,
                         beta: tuple, dc: tuple, arrival: tuple, symptomatic_probability: float, dates: dict,
@@ -180,7 +179,7 @@ class Calibration(object):
         manager = multiprocessing.Manager()
         return_list = manager.list()
         jobs = list()
-        cores = multiprocessing.cpu_count() - 1
+        cores = 2
         p = multiprocessing.Process(target=self.calculate_point, args=(real_seroprevalence, real_case, real_death,
                                                                        weights, tuple(beta), tuple(dc), tuple(arrival),
                                                                        symptomatic_probability, dates, return_list,
@@ -203,7 +202,7 @@ class Calibration(object):
                 job.start()
             for job in sets:
                 job.join()
-            for solution in range(max(1, block*cores), min((block+1)*cores-1, len(return_list))):
+            for solution in range(max(0, block*cores), min((block+1)*cores-1, len(return_list))):
                 jobs2 = list()
                 manager2 = multiprocessing.Manager()
                 return_list2 = manager2.list()
@@ -474,7 +473,7 @@ class Calibration(object):
         manager = multiprocessing.Manager()
         return_list = manager.list()
         jobs = list()
-        cores = multiprocessing.cpu_count()
+        cores = 2
         for i in range(n_relevant):
             np_point = np.array([values_list[i + 1]['beta'], values_list[i + 1]['dc'], values_list[i + 1]['arrival'],
                                  np.ones(6) * values_list[i + 1]['spc']])

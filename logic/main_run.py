@@ -7,10 +7,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 from root import DIR_INPUT, DIR_OUTPUT
-from tqdm import tqdm
 
 matplotlib.use('Agg')
-
 
 class MainRun(object):
 
@@ -21,6 +19,7 @@ class MainRun(object):
             self.type_paramsA[pv[0]] = 'BASE_VALUE'
         for pv in self.model_ex.prob_params:
             self.type_paramsA[pv[0]] = 'BASE_VALUE'
+
         priority_scenarios = pd.read_csv(DIR_INPUT + 'priority_vaccines.csv')
         self.priority_vaccine_scenarios = dict()
         for sc in priority_scenarios.SCENARIO.unique():
@@ -29,125 +28,115 @@ class MainRun(object):
                 by='PHASE', ascending=True)
             phases = list()
             for ph in scenario.PHASE.unique():
-                phase_list = dict()
-                algo = scenario[scenario.PHASE == ph][['AGE_GROUP', 'WORK_GROUP', 'HEALTH_GROUP', 'PERCENT']]
-                for r, row in algo.iterrows():
-                    phase_list[(row['AGE_GROUP'], row['WORK_GROUP'], row['HEALTH_GROUP'])] = row['PERCENT']
-                phases.append(phase_list)
+                phases.append(scenario[scenario.PHASE == ph][['AGE_GROUP', 'WORK_GROUP', 'HEALTH_GROUP',
+                                                              'PERCENT']].values.tolist())
             self.priority_vaccine_scenarios[sc] = phases
-        self.vaccine_information = pd.read_excel(DIR_INPUT + 'vaccine_info.xlsx', index_col=0).to_dict('index')
-        self.total_sim_length = 365*3
+        vaccine_effectiveness_df = pd.read_csv(DIR_INPUT + 'vaccine_effectiveness.csv', sep=';')
+        self.vaccine_effectiveness_scenarios = dict()
+        for index, row in vaccine_effectiveness_df.iterrows():
+            self.vaccine_effectiveness_scenarios[row['SCENARIO']] = \
+                self.vaccine_effectiveness_scenarios.get(row['SCENARIO'], dict())
+            self.vaccine_effectiveness_scenarios[row['SCENARIO']][(row['AGE_GROUP'], row['HEALTH_GROUP'])] = \
+                {'VACCINE_EFFECTIVENESS_1': row['VACCINE_EFFECTIVENESS_1'],
+                 'VACCINE_EFFECTIVENESS_2': row['VACCINE_EFFECTIVENESS_2']}
+        del vaccine_effectiveness_df
+
         self.vaccine_start_days = {'INF_VALUE': 377, 'BASE_VALUE': 419, 'MAX_VALUE': 480}
         self.vaccine_end_days = {'INF_VALUE': 682, 'BASE_VALUE': 724, 'MAX_VALUE': 785}
+        self.n_vaccine_days = 305
         self.type_paramsA['daly'] = 'BASE_VALUE'
         self.type_paramsA['cost'] = 'BASE_VALUE'
         self.type_paramsA['vaccine_day'] = 'BASE_VALUE'
+        self.vaccine_information = pd.read_excel(DIR_INPUT + 'vaccine_info.xlsx', index_col=0).to_dict('index')
 
-    def run(self, c_beta_base: tuple, c_death_base: tuple, c_arrival_base: tuple, spc: float, sensitivity: bool = True):
-        jobs = list()
-        cores = 3 #int(multiprocessing.cpu_count()/2) - 1
-        # PARAMETERS:
-        # type_params: dict,
-        # name: str = 'Iteration',
-        # run_type: str = 'vaccination',
-        # beta: tuple,
-        # death_coefficient: tuple,
-        # arrival_coefficient: tuple,
-        # symptomatic_coefficient: float,
-        # vaccine_priority: list = None,
-        # vaccine_information: dict { 'vacuna':
-        #                               {'total_doses', 'inter_dose_time', 'effectivity', 'symptomatic_prob_reduction'}}
-        # vaccine_start_day: int = None,
-        # vaccine_end_day: int = None,
-        # sim_length: int = 365*3,
-        # export_type: list = None,
-        # use_tqdm: bool = False,
-        # t_lost_inm: int = 0
-        '''p = multiprocessing.Process(target=self.model_ex.run, args=(self.type_paramsA, 'no_vac', 'no_vaccination',
-                                                                    c_beta_base, c_death_base, c_arrival_base, spc,
-                                                                    None, None, None, None, self.total_sim_length,
-                                                                    'csv', False, 0))
-        jobs.append(p)
-        jobs[0].start()
-        print('Start no vac', datetime.datetime.now())'''
+    def run(self, c_beta_base: tuple, c_death_base: tuple, c_arrival_base: tuple, spc: float):
+
+
+        '''
+        type_params: dict, 
+        name: str = 'Iteration', 
+        run_type: str = 'vaccination',
+        beta: tuple = beta_f, 
+        death_coefficient: tuple = dc_f, 
+        arrival_coefficient: tuple = arrival_f,
+        symptomatic_coefficient: float = spc_f, 
+        vaccine_priority: list = None, 
+        vaccine_information: dict = None,
+        vaccine_start_days: dict = None, 
+        vaccine_end_days: dict = None, 
+        sim_length: int = 365 * 3,
+        use_tqdm: bool = False, 
+        t_lost_inm: int = 0, 
+        n_parallel: int = multiprocessing.cpu_count() - 1,
+        exporting_information: Union[str, list] = 'All'
+        '''
+        '''c_name = 'no_vac_'
+        print(c_name, datetime.datetime.now())
+        r = self.model_ex.run(type_params=self.type_paramsA, name=c_name, run_type='no_vaccination',
+                              beta=c_beta_base, death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
+                              symptomatic_coefficient=spc, vaccine_priority=None, vaccine_information=None,
+                              vaccine_start_days=None, vaccine_end_days=None, sim_length=365 * 3, use_tqdm=True,
+                              t_lost_inm=0, n_parallel=multiprocessing.cpu_count()*7,
+                              exporting_information='All')'''
         for pvs in self.priority_vaccine_scenarios:
-            c_name = 'vac_priority_' + pvs
-            p = multiprocessing.Process(target=self.model_ex.run,
-                                        args=(self.type_paramsA, c_name, 'vaccination', c_beta_base,
-                                              c_death_base, c_arrival_base, spc,
-                                              self.priority_vaccine_scenarios[pvs],
-                                              self.vaccine_information, self.vaccine_start_days,
-                                              self.vaccine_end_days, self.total_sim_length, 'csv', True))
-            available = False
-            while not available:
-                n_count = 0
-                for j in range(len(jobs)):
-                    if jobs[j].is_alive():
-                        n_count += 1
-                if n_count < cores:
-                    available = True
-                    jobs.append(p)
-                    jobs[len(jobs) - 1].start()
-                    print('Start', c_name, datetime.datetime.now())
-                else:
-                    time.sleep(1)
-
-        if sensitivity:
-            params = list(self.type_paramsA.keys())
-            for pv in params:
-                type_params_b = self.type_paramsA.copy()
-                for val in ['INF_VALUE', 'MAX_VALUE']:
-                    type_params_b[pv] = val
-                    '''c_name = 'sensitivity_' + pv + '_' + val + '_vac_priority_no_vac'
-                    p = multiprocessing.Process(target=self.model_ex.run,
-                                                args=(type_params_b, c_name, 'no_vaccination', c_beta_base, c_death_base,
-                                                      c_arrival_base, spc, None, None, None, None, self.total_sim_length,
-                                                      'csv', True))
-                    available = False
-                    while not available:
-                        n_count = 0
-                        for j in range(len(jobs)):
-                            if jobs[j].is_alive():
-                                n_count += 1
-                        if n_count < cores:
-                            available = True
-                            jobs.append(p)
-                            jobs[len(jobs) - 1].start()
-                            print('Start', c_name, datetime.datetime.now())
-                        else:
-                            time.sleep(1)'''
-                    for pvs in self.priority_vaccine_scenarios:
-                        c_name = 'sensitivity_' + pv + '_' + val + '_vac_priority_' + pvs
-                        p = multiprocessing.Process(target=self.model_ex.run,
-                                                    args=(type_params_b, c_name, 'vaccination', c_beta_base, c_death_base,
-                                                          c_arrival_base, spc, self.priority_vaccine_scenarios[pvs],
-                                                          self.vaccine_information, self.vaccine_start_days,
-                                                          self.vaccine_end_days, self.total_sim_length, 'csv', True))
-                        available = False
-                        while not available:
-                            n_count = 0
-                            for j in range(len(jobs)):
-                                if jobs[j].is_alive():
-                                    n_count += 1
-                            if n_count < cores:
-                                available = True
-                                jobs.append(p)
-                                jobs[len(jobs) - 1].start()
-                                print('Start', c_name, datetime.datetime.now())
-                            else:
-                                time.sleep(1)
-        available = False
-        while not available:
-            n_count = 0
-            for j in range(len(jobs)):
-                if jobs[j].is_alive():
-                    n_count += 1
-            if n_count == 0:
-                available = True
-            else:
-                time.sleep(1)
+            c_name = 'vac_priority_' + pvs + '_'
+            print(c_name, datetime.datetime.now())
+            self.model_ex.run(type_params=self.type_paramsA, name=c_name, run_type='vaccination',
+                              beta=c_beta_base, death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
+                              symptomatic_coefficient=spc, vaccine_priority=self.priority_vaccine_scenarios[pvs],
+                              vaccine_information=self.vaccine_information,
+                              vaccine_start_days=self.vaccine_start_days,
+                              vaccine_end_days=self.vaccine_end_days, sim_length=365 * 3, use_tqdm=True,
+                              t_lost_inm=0, n_parallel=multiprocessing.cpu_count() * 3,
+                              exporting_information='All')
+        '''for i in range(1, 11):
+            c_name = 'no_vac_' + str(i*5)
+            print(c_name, datetime.datetime.now())
+            self.model_ex.run(type_params=self.type_paramsA, name=c_name, run_type='no_vaccination', beta=c_beta_base,
+                              death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
+                              symptomatic_coefficient=spc, vaccine_priority=None, vaccine_information=None,
+                              vaccine_start_days=None, vaccine_end_days=None, sim_length=365*3, use_tqdm=True,
+                              t_lost_inm=i*5/(100*365), n_parallel=multiprocessing.cpu_count()*7,
+                              exporting_information=[])'''
+        for i in range(0, 11):
+            for pvs in self.priority_vaccine_scenarios:
+                c_name = 'vac_priority_' + pvs + '_' + str(i*5)
+                print(c_name, datetime.datetime.now())
+                self.model_ex.run(type_params=self.type_paramsA, name=c_name, run_type='vaccination',
+                                  beta=c_beta_base, death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
+                                  symptomatic_coefficient=spc, vaccine_priority=self.priority_vaccine_scenarios[pvs],
+                                  vaccine_information=self.vaccine_information,
+                                  vaccine_start_days=self.vaccine_start_days,
+                                  vaccine_end_days=self.vaccine_end_days, sim_length=365*3, use_tqdm=True,
+                                  t_lost_inm=i*5/(100*365), n_parallel=multiprocessing.cpu_count()*3,
+                                  exporting_information=[])
+        for pv in self.type_paramsA:
+            type_params_b = self.type_paramsA.copy()
+            for val in ['INF_VALUE', 'MAX_VALUE']:
+                type_params_b[pv] = val
+                c_name = 'sensitivity_' + pv + '_' + val + '_vac_priority_no_vac'
+                print(c_name, datetime.datetime.now())
+                self.model_ex.run(type_params=type_params_b, name=c_name, run_type='no_vaccination',
+                                  beta=c_beta_base,
+                                  death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
+                                  symptomatic_coefficient=spc, vaccine_priority=None, vaccine_information=None,
+                                  vaccine_start_days=None, vaccine_end_days=None, sim_length=365 * 3, use_tqdm=True,
+                                  t_lost_inm=0, n_parallel=multiprocessing.cpu_count() * 3,
+                                  exporting_information=[])
+                for pvs in self.priority_vaccine_scenarios:
+                    c_name = 'sensitivity_' + pv + '_' + val + '_vac_priority_' + pvs
+                    print(c_name, datetime.datetime.now())
+                    self.model_ex.run(type_params=type_params_b, name=c_name, run_type='vaccination',
+                                      beta=c_beta_base, death_coefficient=c_death_base,
+                                      arrival_coefficient=c_arrival_base,
+                                      symptomatic_coefficient=spc,
+                                      vaccine_priority=self.priority_vaccine_scenarios[pvs],
+                                      vaccine_information=self.vaccine_information,
+                                      vaccine_start_days=self.vaccine_start_days,
+                                      vaccine_end_days=self.vaccine_end_days, sim_length=365 * 3, use_tqdm=True,
+                                      t_lost_inm=i*5 / (100 * 365), n_parallel=multiprocessing.cpu_count() * 3,
+                                      exporting_information=[])
         print('End process')
-
 
     def run_quality_test(self, c_beta_base: tuple, c_death_base: tuple, c_arrival_base: tuple, spc: float,
                          name: str = 'no vac'):
@@ -197,3 +186,4 @@ class MainRun(object):
                                                                        index=False)
         df_compare[['Date', 'Real_Cases', 'Simulated_Cases']].to_csv(DIR_OUTPUT + name + 'CaseComparison.csv',
                                                                      index=False)
+        plt.close('all')

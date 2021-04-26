@@ -185,7 +185,6 @@ class MainRun(object):
         plt.close('all')
 
     def run_sensibility_spc(self, c_beta_base: tuple, c_death_base: tuple, c_arrival_base: tuple, spc: float):
-
         for coef in [0.5, 0.75, 1.5, 1.75]:
             c_name = 'no_vac_spc_' + str(coef)
             print(c_name, datetime.datetime.now())

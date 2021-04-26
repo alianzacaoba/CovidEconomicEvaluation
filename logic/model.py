@@ -160,8 +160,8 @@ class Model(object):
         self.daly_vector = {'Home': {'INF_VALUE': 0.002, 'BASE_VALUE': 0.006, 'MAX_VALUE': 0.012},
                             'Hosp': {'INF_VALUE': 0.032, 'BASE_VALUE': 0.051, 'MAX_VALUE': 0.074},
                             'ICU': {'INF_VALUE': 0.088, 'BASE_VALUE': 0.133, 'MAX_VALUE': 0.190},
-                            'Death': {'INF_VALUE': 1, 'BASE_VALUE': 1, 'MAX_VALUE': 1},
-                            'Recovered': {'INF_VALUE': 0.0, 'BASE_VALUE': 0.0, 'MAX_VALUE': 0.006}}
+                            'Death': {'e0': 72.11, 'e1': 62.11, 'e2': 52.11, 'e3': 42.11, 'e4': 32.11, 'e5': 22.11,
+                                      'e6': 12.11, 'e7': 2.11}}
         self.vaccine_cost = {'INF_VALUE': 1035.892076, 'BASE_VALUE': 9413.864213, 'MAX_VALUE': 32021.81881}
         self.contact_matrix = {'HOME': {}, 'WORK': {}, 'SCHOOL': {}, 'OTHER': {}}
         con_matrix_home = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Home', engine="openpyxl")
@@ -294,7 +294,10 @@ class Model(object):
             if run_type == 'vaccination' else ['V0']
         daly_vector = dict()
         for dv in self.daly_vector:
-            daly_vector[dv] = self.daly_vector[dv][type_params['daly']]
+            if dv == 'Death':
+                daly_vector[dv] = self.daly_vector[dv]
+            else:
+                daly_vector[dv] = self.daly_vector[dv][type_params['daly']]
         t_e = self.time_params[('t_e', 'ALL')][type_params['t_e']]
         t_p = self.time_params[('t_p', 'ALL')][type_params['t_p']]
         t_sy = self.time_params[('t_sy', 'ALL')][type_params['t_sy']]
@@ -493,8 +496,8 @@ class Model(object):
                 pop_pandas = pop_pandas.groupby(exporting_information).sum().reset_index(drop=False)
             pop_pandas['Total_Cost'] = pop_pandas['vac_cost'] + pop_pandas['home_cost'] + pop_pandas['hosp_cost'] + \
                                        pop_pandas['uci_cost']
-            pop_pandas['Total_Daly'] = pop_pandas['Death'] / 365 + pop_pandas['home_daly'] + pop_pandas['hosp_daly'] + \
-                                       pop_pandas['uci_daly'] + pop_pandas['recovery_daly']
+            pop_pandas['Total_Daly'] = pop_pandas['home_daly'] + pop_pandas['hosp_daly'] + pop_pandas['uci_daly'] + \
+                                       pop_pandas['death_daly']
             pop_pandas['Date'] = pop_pandas['day'].apply(lambda x: datetime.datetime(2020, 2, 21) +
                                                                    datetime.timedelta(days=x))
             print('Begin CSV exportation', datetime.datetime.now())
@@ -647,6 +650,8 @@ class DepartmentRun(Thread):
                         compartments.append(uci_daly)
                         recovery_daly = Compartment('recovery_daly')
                         compartments.append(recovery_daly)
+                        death_daly = Compartment('death_daly')
+                        compartments.append(death_daly)
                         population_h[vv] = compartments
                     population_w[hv] = population_h
                 population_e[wv] = population_w
@@ -716,7 +721,7 @@ class DepartmentRun(Thread):
                             # Bring relevant population
                             su, e, p, sy, c, h, i, r_s, a, r, inm, d, cases, seroprevalence, total_pob, new_home, \
                             new_hosp, new_uci, vac_cost, home_cost, hosp_cost, uci_cost, home_daly, hosp_daly, \
-                            uci_daly, recovery_daly = population[ev][wv][hv][vv]
+                            uci_daly, recovery_daly, death_daly = population[ev][wv][hv][vv]
                             cur_su = su.values.get(t, 0)
                             cur_e = e.values.get(t, 0)
                             cur_p = p.values.get(t, 0)
@@ -806,10 +811,16 @@ class DepartmentRun(Thread):
                             home_cost.values[t + 1] = new_home.values[t + 1] * attention_costs[(ev, hv, 'C')]
                             hosp_cost.values[t + 1] = new_hosp.values[t + 1] * attention_costs[(ev, hv, 'H')]
                             uci_cost.values[t + 1] = new_uci.values[t + 1] * attention_costs[(ev, hv, 'I')]
-                            home_daly.values[t + 1] = c.values[t + 1] * daly_vector['Home'] / 365
-                            hosp_daly.values[t + 1] = h.values[t + 1] * daly_vector['Hosp'] / 365
-                            uci_daly.values[t + 1] = i.values[t + 1] * daly_vector['ICU'] / 365
-                            recovery_daly.values[t + 1] = r_s.values[t + 1] * daly_vector['Recovered'] / 365
+                            home_daly.values[t + 1] = c.values[t + 1] * daly_vector['Home'] / 365 +\
+                                                      home_death_threshold*(1 - p_c_d[(ev, vv, hv)]) * \
+                                                      daly_vector['Home']*t_r[ev]/365
+                            hosp_daly.values[t + 1] = h.values[t + 1] * daly_vector['Hosp'] / 365 + \
+                                                      hosp_death_threshold * (1 - p_h_d[(ev, vv, hv)]) * \
+                                                      daly_vector['Hosp'] * t_r[ev] / 365
+                            uci_daly.values[t + 1] = i.values[t + 1] * daly_vector['ICU'] / 365 + \
+                                                     icu_death_threshold * (1 - p_i_d[(ev, vv, hv)]) * \
+                                                      daly_vector['ICU'] * t_r[ev] / 365
+                            death_daly.values[t+1] = float(sum(dd_dt)) * daly_vector['Death'][ev]
 
             # Vaccination dynamics
             if vaccine_start_day <= t <= vaccine_end_day:

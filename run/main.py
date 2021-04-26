@@ -15,15 +15,15 @@ model_run = MainRun()
 
 c_beta_base = (0.015979623745597444, 0.012110689672789041, 0.010139480614469267, 0.006958321122570045,
                0.007557581199354777, 0.003358622961036333)
-c_death_base = (0.5451170403926056*.8, 0.2177657799524104*.8, 0.4720134776487867*.8, 0.3223323473197045*.8,
-                0.69777355043156*.8, 0.028363414905611194*.8)
+c_death_base = (0.5451170403926056, 0.2177657799524104, 0.4720134776487867, 0.3223323473197045,
+                0.69777355043156, 0.028363414905611194)
 c_arrival_base = (10.831876038710954, 4.290547767179307, 15.591861489326254, 14.713731428337997, 19.684588648640553,
                   4.053605807740285)
 spc = 0.5
-# model_run.run_quality_test(c_beta_base=c_beta_base, c_death_base=c_death_base, c_arrival_base=c_arrival_base, spc=spc)
-#model_run.run(c_beta_base, c_death_base, c_arrival_base, spc)
-#model_run.run_sensibility_spc(c_beta_base, c_death_base, c_arrival_base, spc)
-#model_run.run_sensibility_vac_eff(c_beta_base, c_death_base, c_arrival_base, spc)
-#model_run.run_sensibility_ifr(c_beta_base, c_death_base, c_arrival_base, spc)
-#model_run.run_sensibility_vac_end(c_beta_base, c_death_base, c_arrival_base, spc)
+model_run.run_quality_test(c_beta_base=c_beta_base, c_death_base=c_death_base, c_arrival_base=c_arrival_base, spc=spc)
+model_run.run(c_beta_base, c_death_base, c_arrival_base, spc)
+model_run.run_sensibility_spc(c_beta_base, c_death_base, c_arrival_base, spc)
+model_run.run_sensibility_vac_eff(c_beta_base, c_death_base, c_arrival_base, spc)
+model_run.run_sensibility_ifr(c_beta_base, c_death_base, c_arrival_base, spc)
+model_run.run_sensibility_vac_end(c_beta_base, c_death_base, c_arrival_base, spc)
 model_run.run_sensibility_contact_variation(c_beta_base, c_death_base, c_arrival_base, spc)

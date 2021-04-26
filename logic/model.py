@@ -448,7 +448,7 @@ class Model(object):
             params['prob_params']['p_c_d'] = p_c_d
             params['prob_params']['p_h_d'] = p_h_d
             params['prob_params']['p_i_d'] = p_i_d
-            if threading.active_count() >= max_threads:
+            while threading.active_count() >= max_threads:
                 time.sleep(0.00001)
             if run_type == 'calibration':
                 for gv2 in result_queue:
@@ -460,7 +460,7 @@ class Model(object):
                         seroprevalence_array[:, gv_region + 6] += result_queue[gv2][:, 3]
                         integrated_departments.append(gv2)
             workers[gv] = DepartmentRun(params=params.copy(), result_queue=result_queue)
-            workers[gv].run()
+            workers[gv].start()
         current_threads = threading.active_count()
         while len(result_queue) < len(workers):
             while current_threads == threading.active_count() and current_threads > initial_threads and \
@@ -648,8 +648,6 @@ class DepartmentRun(Thread):
                         compartments.append(hosp_daly)
                         uci_daly = Compartment('uci_daly')
                         compartments.append(uci_daly)
-                        recovery_daly = Compartment('recovery_daly')
-                        compartments.append(recovery_daly)
                         death_daly = Compartment('death_daly')
                         compartments.append(death_daly)
                         population_h[vv] = compartments
@@ -721,7 +719,7 @@ class DepartmentRun(Thread):
                             # Bring relevant population
                             su, e, p, sy, c, h, i, r_s, a, r, inm, d, cases, seroprevalence, total_pob, new_home, \
                             new_hosp, new_uci, vac_cost, home_cost, hosp_cost, uci_cost, home_daly, hosp_daly, \
-                            uci_daly, recovery_daly, death_daly = population[ev][wv][hv][vv]
+                            uci_daly, death_daly = population[ev][wv][hv][vv]
                             cur_su = su.values.get(t, 0)
                             cur_e = e.values.get(t, 0)
                             cur_p = p.values.get(t, 0)

@@ -21,4 +21,9 @@ c_arrival_base = (10.831876038710954, 4.290547767179307, 15.591861489326254, 14.
                   4.053605807740285)
 spc = 0.5
 # model_run.run_quality_test(c_beta_base=c_beta_base, c_death_base=c_death_base, c_arrival_base=c_arrival_base, spc=spc)
-model_run.run(c_beta_base, c_death_base, c_arrival_base, spc)
+#model_run.run(c_beta_base, c_death_base, c_arrival_base, spc)
+#model_run.run_sensibility_spc(c_beta_base, c_death_base, c_arrival_base, spc)
+#model_run.run_sensibility_vac_eff(c_beta_base, c_death_base, c_arrival_base, spc)
+#model_run.run_sensibility_ifr(c_beta_base, c_death_base, c_arrival_base, spc)
+#model_run.run_sensibility_vac_end(c_beta_base, c_death_base, c_arrival_base, spc)
+model_run.run_sensibility_contact_variation(c_beta_base, c_death_base, c_arrival_base, spc)

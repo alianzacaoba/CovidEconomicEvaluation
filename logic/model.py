@@ -247,7 +247,8 @@ class Model(object):
             symptomatic_coefficient: float = spc_f, vaccine_priority: list = None, vaccine_information: dict = None,
             vaccine_start_days: dict = None, vaccine_end_days: dict = None, sim_length: int = 365 * 3,
             use_tqdm: bool = False, t_lost_inm: int = 0, n_parallel: int = multiprocessing.cpu_count()-1,
-            exporting_information: Union[str, list] = 'All'):
+            exporting_information: Union[str, list] = 'All', vaccine_effectiveness_params: list = None,
+            future_variation: float = None):
 
         # run_type:
         #   1) 'calibration': no vaccination status - returns the daily results of measurement (cases, deaths,
@@ -269,9 +270,15 @@ class Model(object):
             vaccine_end_day = vaccine_end_days[type_params['vaccine_day']]
         if vaccine_information is not None:
             for vac in vaccine_information:
+                vaccine_eff = vaccine_information[vac]['effectivity']
+                if vaccine_effectiveness_params is not None:
+                    if vaccine_effectiveness_params[0] == 'R':
+                        vaccine_eff *= (1-vaccine_effectiveness_params[1])
+                    elif vaccine_effectiveness_params[0] == 'V':
+                        vaccine_eff = vaccine_effectiveness_params[1]
                 vaccine_information[vac]['dose_effectivity'] = 1 - math.sqrt(
-                    1 - vaccine_information[vac]['effectivity']) if vaccine_information[vac]['inter_dose_time'] > 0 else \
-                    vaccine_information[vac]['effectivity']
+                    1 - vaccine_eff) if vaccine_information[vac]['inter_dose_time'] > 0 else \
+                    vaccine_eff
 
         vaccination_calendar = create_vaccine_assignation(start_date=vaccine_start_day,
                                                           end_date=vaccine_end_day,
@@ -351,68 +358,73 @@ class Model(object):
         results_array = np.zeros(shape=(sim_length + 1, 18)) if run_type == 'calibration' else None
         seroprevalence_array = np.zeros(shape=(sim_length + 1, 12)) if run_type == 'calibration' else None
         integrated_departments = [] if run_type == 'calibration' else None
+        params = dict()
+        params['run_type'] = run_type
+        params['sim_length'] = sim_length
+        params['groups'] = age_groups, work_groups, health_groups, vaccination_groups
+        params['contact_matrix'] = self.contact_matrix
+        params['t_lost_inm'] = t_lost_inm
+        params['morbidity_frac'] = self.morbidity_frac
+        params['exporting_information'] = exporting_information
+        params['attention_costs'] = attention_costs
+        params['max_cm_days'] = self.max_cm_days if future_variation is None else self.max_cm_days +1
+        if run_type == 'vaccination':
+            # Vaccination run type info
+            params['vaccine_information'] = vaccine_information
+            params['vaccine_priority'] = vaccine_priority
+            params['vaccine_cost'] = self.vaccine_cost[type_params['cost']]
+        params['vaccination_period'] = [vaccine_start_day, vaccine_end_day]
+        # All type information
+        params['daly_vector'] = daly_vector
+        params['time_params'] = dict()
+        params['time_params']['t_e'] = t_e
+        params['time_params']['t_p'] = t_p
+        params['time_params']['t_sy'] = t_sy
+        params['time_params']['t_a'] = t_a
+        params['time_params']['t_ri'] = t_ri
+        params['time_params']['t_d'] = t_d
+        params['time_params']['t_r'] = t_r
+
+        # Prob params
+        params['prob_params'] = dict()
+        params['prob_params']['initial_sus'] = initial_sus
+        params['prob_params']['p_s'] = p_s
+        params['prob_params']['p_c'] = p_c
+        params['prob_params']['p_h'] = p_h
+        params['prob_params']['p_i'] = p_i
         iterator = tqdm(departments) if use_tqdm else departments
         for gv in iterator:
             cur_region = self.regions[gv] - 1
-            params = dict()
             params['initial_population'] = self.initial_population[gv]
-            params['run_type'] = run_type
-            params['sim_length'] = sim_length
-            params['groups'] = age_groups, work_groups, health_groups, vaccination_groups
-            params['contact_matrix_coefficients'] = self.contact_matrix_coefficients[self.regions[gv]]
-            params['contact_matrix'] = self.contact_matrix
-            params['max_cm_days'] = self.max_cm_days
+            params['contact_matrix_coefficients'] = self.contact_matrix_coefficients[self.regions[gv]].copy()
+            if future_variation is not None:
+                params['contact_matrix_coefficients'][self.max_cm_days+1] = dict()
+                for cv in params['contact_matrix_coefficients'][self.max_cm_days]:
+                    params['contact_matrix_coefficients'][self.max_cm_days + 1][cv] = future_variation
             params['beta'] = beta[cur_region]
-            params['t_lost_inm'] = t_lost_inm
             arrival_rate = {'START_DAY': self.arrival_rate['START_DAY'][gv],
                             'END_DAY': self.arrival_rate['START_DAY'][gv],
                             'ARRIVAL_RATE': self.arrival_rate['ARRIVAL_RATE'][gv] * arrival_coefficient[cur_region]}
             params['arrival_rate'] = arrival_rate
             params['birth_rate'] = self.birth_rates[gv]
             params['death_rate'] = self.death_rates[gv]
-            params['morbidity_frac'] = self.morbidity_frac
             params['med_degrees'] = self.med_degrees[gv]
             params['gv'] = gv
-            params['exporting_information'] = exporting_information
-            params['attention_costs'] = attention_costs
-
             if run_type == 'vaccination':
                 # Vaccination run type info
-                params['vaccine_information'] = vaccine_information
                 params['vaccination_calendar'] = vaccination_calendar[gv]
-                params['vaccine_priority'] = vaccine_priority
-                params['vaccine_cost'] = self.vaccine_cost[type_params['cost']]
-            params['vaccination_period'] = [vaccine_start_day, vaccine_end_day]
-
-            # All type information
-            params['daly_vector'] = daly_vector
-            params['time_params'] = dict()
-            params['time_params']['t_e'] = t_e
-            params['time_params']['t_p'] = t_p
-            params['time_params']['t_sy'] = t_sy
-            params['time_params']['t_a'] = t_a
-            params['time_params']['t_ri'] = t_ri
-            params['time_params']['t_d'] = t_d
-            params['time_params']['t_r'] = t_r
-
-            # Prob params
-            params['prob_params'] = dict()
-            params['prob_params']['initial_sus'] = initial_sus
-            params['prob_params']['p_s'] = p_s
-            params['prob_params']['p_c'] = p_c
-            params['prob_params']['p_h'] = p_h
-            params['prob_params']['p_i'] = p_i
             p_c_d = dict()
             p_h_d = dict()
             p_i_d = dict()
             for ev in age_groups:
                 for hv in health_groups:
-                    p_c_d[(ev, 'V0', hv)] = min(death_coefficient[cur_region] *
-                                                    self.prob_params[('p_c_d', ev, hv)][type_params['p_c_d']], 1.0)
-                    p_h_d[(ev, 'V0', hv)] = min(death_coefficient[cur_region] *
-                                                    self.prob_params[('p_h_d', ev, hv)][type_params['p_h_d']], 1.0)
-                    p_i_d[(ev, 'V0', hv)] = min(death_coefficient[cur_region] *
-                                                    self.prob_params[('p_i_d', ev, hv)][type_params['p_i_d']], 1.0)
+                    p_c_d[(ev, 'V0', hv)] = min(death_coefficient[cur_region] * self.prob_params[('p_c_d', ev, hv)][
+                        type_params['p_c_d']], 1.0)
+                    p_h_d[(ev, 'V0', hv)] = min(death_coefficient[cur_region] * self.prob_params[('p_h_d', ev, hv)][
+                        type_params['p_h_d']], 1.0)
+                    p_i_d[(ev, 'V0', hv)] = min(death_coefficient[cur_region] * self.prob_params[('p_i_d', ev, hv)][
+
+                        type_params['p_i_d']], 1.0)
             if run_type == 'vaccination':
                 for ev in age_groups:
                     for hv in health_groups:
@@ -444,7 +456,7 @@ class Model(object):
                         seroprevalence_array[:, gv_region] += result_queue[gv2][:, 2]
                         seroprevalence_array[:, gv_region + 6] += result_queue[gv2][:, 3]
                         integrated_departments.append(gv2)
-            workers[gv] = DepartmentRun(params=params, result_queue=result_queue)
+            workers[gv] = DepartmentRun(params=params.copy(), result_queue=result_queue)
             workers[gv].run()
         current_threads = threading.active_count()
         while len(result_queue) < len(workers):
@@ -639,10 +651,11 @@ class DepartmentRun(Thread):
                     population_w[hv] = population_h
                 population_e[wv] = population_w
             population[ev] = population_e
-
+        day = -1
         for t in range(sim_length):
+            if day < max_cm_days:
+                day += 1
             cur_pob = 0
-            cm_day = min(t, max_cm_days)
             for ev in age_groups:
                 for wv in work_groups:
                     for hv in health_groups:
@@ -696,8 +709,7 @@ class DepartmentRun(Thread):
             for ev in age_groups:
                 contacts = np.zeros(len(age_groups))
                 for cv in contact_matrix:
-                    contacts += (1+contact_matrix_coefficients[cm_day][cv]) \
-                                * np.array(contact_matrix[cv][ev])
+                    contacts += (1+contact_matrix_coefficients[day][cv]) * np.array(contact_matrix[cv][ev])
                 for wv in work_groups:
                     for hv in health_groups:
                         for vv in vaccination_groups:

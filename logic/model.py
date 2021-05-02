@@ -77,9 +77,9 @@ def calculate_vaccine_assignments(population: dict, day: int, vaccine_priority: 
                 for group in groups:
                     ev, wv, hv, p = group
                     for cv in candidates_indexes:
-                        assignation[(ev, wv, hv, vv, cv, vaccine)] = min(vaccines_for_group * \
-                                                                     day_population[(ev, wv, hv, vv, cv)] / \
-                                                                     group_candidates,
+                        assignation[(ev, wv, hv, vv, cv, vaccine)] = min(vaccines_for_group *
+                                                                         day_population[(ev, wv, hv, vv, cv)] /
+                                                                         group_candidates,
                                                                          day_population[(ev, wv, hv, vv, cv)])
                         day_population[(ev, wv, hv, vv, cv)] -= assignation[(ev, wv, hv, vv, cv, vaccine)]
     return assignation
@@ -246,7 +246,7 @@ class Model(object):
             beta: tuple = beta_f, death_coefficient: tuple = dc_f, arrival_coefficient: tuple = arrival_f,
             symptomatic_coefficient: float = spc_f, vaccine_priority: list = None, vaccine_information: dict = None,
             vaccine_start_days: dict = None, vaccine_end_days: dict = None, sim_length: int = 365 * 3,
-            use_tqdm: bool = False, t_lost_inm: int = 0, n_parallel: int = multiprocessing.cpu_count()-1,
+            use_tqdm: bool = False, t_lost_imm: int = 0, n_parallel: int = multiprocessing.cpu_count()-1,
             exporting_information: Union[str, list] = 'All', vaccine_effectiveness_params: list = None,
             future_variation: float = None):
 
@@ -366,11 +366,11 @@ class Model(object):
         params['sim_length'] = sim_length
         params['groups'] = age_groups, work_groups, health_groups, vaccination_groups
         params['contact_matrix'] = self.contact_matrix
-        params['t_lost_inm'] = t_lost_inm
+        params['t_lost_imm'] = t_lost_imm
         params['morbidity_frac'] = self.morbidity_frac
         params['exporting_information'] = exporting_information
         params['attention_costs'] = attention_costs
-        params['max_cm_days'] = self.max_cm_days if future_variation is None else self.max_cm_days +1
+        params['max_cm_days'] = self.max_cm_days if future_variation is None else self.max_cm_days + 1
         if run_type == 'vaccination':
             # Vaccination run type info
             params['vaccine_information'] = vaccine_information
@@ -525,7 +525,7 @@ class DepartmentRun(Thread):
         contact_matrix = self.params['contact_matrix']
         max_cm_days = self.params['max_cm_days']
         beta = self.params['beta']
-        t_lost_inm = self.params['t_lost_inm']
+        t_lost_imm = self.params['t_lost_imm']
         arrival_rate = self.params['arrival_rate']
         birth_rate = self.params['birth_rate']
         death_rate = self.params['death_rate']
@@ -571,7 +571,7 @@ class DepartmentRun(Thread):
         i_1_indexes = [2, 3, 4, 7, 10]
         i_2_indexes = [5, 6]
         candidates_indexes = [0, 1, 8, 10]
-        alive_compartments = list(range(12))
+        alive_compartments = list(range(11))
         percentages = dict()
         if vaccine_priority is not None:
             for phase in vaccine_priority:
@@ -618,8 +618,8 @@ class DepartmentRun(Thread):
                         compartments.append(a)
                         r = Compartment(name='Recovered', initial_value=first_value * (1 - initial_sus))
                         compartments.append(r)
-                        inm = Compartment('Immune')
-                        compartments.append(inm)
+                        imm = Compartment('Immune')
+                        compartments.append(imm)
                         d = Compartment('Death')
                         compartments.append(d)
                         cases = Compartment('Cases')
@@ -717,23 +717,51 @@ class DepartmentRun(Thread):
                     for hv in health_groups:
                         for vv in vaccination_groups:
                             # Bring relevant population
-                            su, e, p, sy, c, h, i, r_s, a, r, inm, d, cases, seroprevalence, total_pob, new_home, \
+                            su, e, p, sy, c, h, i, r_s, a, r, imm, d, cases, seroprevalence, total_pob, new_home, \
                             new_hosp, new_uci, vac_cost, home_cost, hosp_cost, uci_cost, home_daly, hosp_daly, \
                             uci_daly, death_daly = population[ev][wv][hv][vv]
                             cur_su = su.values.get(t, 0)
+                            if cur_su < 0:
+                                print('Su', gv, ev, wv, hv, vv, t, cur_su)
                             cur_e = e.values.get(t, 0)
+                            if cur_e < 0:
+                                print('E', gv, ev, wv, hv, vv, t, cur_e)
                             cur_p = p.values.get(t, 0)
+                            if cur_p < 0:
+                                print('P', gv, ev, wv, hv, vv, t, cur_p)
                             cur_sy = sy.values.get(t, 0)
+                            if cur_sy < 0:
+                                print('Sy', gv, ev, wv, hv, vv, t, cur_sy)
                             cur_c = c.values.get(t, 0)
+                            if cur_c < 0:
+                                print('C', gv, ev, wv, hv, vv, t, cur_c)
                             cur_h = h.values.get(t, 0)
+                            if cur_h < 0:
+                                print('H', gv, ev, wv, hv, vv, t, cur_h)
                             cur_i = i.values.get(t, 0)
+                            if cur_i < 0:
+                                print('I', gv, ev, wv, hv, vv, t, cur_i)
                             cur_r_s = r_s.values.get(t, 0)
+                            if cur_r_s < 0:
+                                print('R_S', gv, ev, wv, hv, vv, t, cur_r_s)
                             cur_a = a.values.get(t, 0)
+                            if cur_a < 0:
+                                print('A', gv, ev, wv, hv, vv, t, cur_a)
                             cur_r = r.values.get(t, 0)
-                            cur_inm = inm.values.get(t, 0)
+                            if cur_r < 0:
+                                print('R', gv, ev, wv, hv, vv, t, cur_r)
+                            cur_imm = imm.values.get(t, 0)
+                            if cur_imm < 0:
+                                print('Imm', gv, ev, wv, hv, vv, t, cur_imm)
                             cur_d = d.values.get(t, 0)
+                            if cur_d < 0:
+                                print('D', gv, ev, wv, hv, vv, t, cur_d)
                             cur_cases = cases.values.get(t, 0)
+                            if cur_cases < 0:
+                                print('Cases', gv, ev, wv, hv, vv, t, cur_cases)
                             cur_seroprevalence = seroprevalence.values.get(t, 0)
+                            if cur_seroprevalence < 0:
+                                print('Seroprevalence', gv, ev, wv, hv, vv, t, cur_seroprevalence)
 
                             percent = np.array(i_1) + np.array(i_2) if wv == 'M' else np.array(i_1)
                             percent_change = min(beta * np.dot(percent, contacts), 1.0)
@@ -747,7 +775,7 @@ class DepartmentRun(Thread):
                             icu_death_threshold = cur_i / t_d[ev]
                             new_recovered = cur_r_s/t_r[ev]
                             new_immune = cur_r/t_ri
-                            lost_immunity = cur_inm*t_lost_inm if t_lost_inm > 0 else 0
+                            lost_immunity = cur_imm*t_lost_imm if t_lost_imm > 0 else 0
                             arrivals = 0.0
                             if arrival_rate['START_DAY'] <= t <= arrival_rate['END_DAY']:
                                 arrivals = arrival_rate['ARRIVAL_RATE']
@@ -775,12 +803,16 @@ class DepartmentRun(Thread):
                                       -asymptomatic_recovery}
                             dr_dt = {new_recovered,
                                       -new_immune}
-                            dinm_dt = {asymptomatic_recovery,
+                            dimm_dt = {asymptomatic_recovery,
                                        new_immune,
                                        -lost_immunity}
                             dd_dt = {home_death_threshold*p_c_d[(ev, vv, hv)],
                                      hosp_death_threshold*p_h_d[(ev, vv, hv)],
                                      icu_death_threshold*p_i_d[(ev, vv, hv)]}
+                            if sum(dd_dt) < 0:
+                                print('Death decrease', gv, ev, wv, hv, vv, t, 'home', home_death_threshold,
+                                      p_c_d[(ev, vv, hv)], 'hosp', hosp_death_threshold, p_h_d[(ev, vv, hv)],
+                                      'icu_death_threshold', icu_death_threshold, p_i_d[(ev, vv, hv)])
                             dcases_dt = {finished_exposed * p_s[(vv, ev)]}
                             dseroprevalence_dt = {finished_exposed}
 
@@ -794,14 +826,17 @@ class DepartmentRun(Thread):
                             r_s.values[t + 1] = cur_r_s + float(sum(dr_s_dt))
                             a.values[t + 1] = cur_a + float(sum(da_dt))
                             r.values[t + 1] = cur_r + float(sum(dr_dt))
-                            inm.values[t + 1] = cur_inm + float(sum(dinm_dt))
+                            imm.values[t + 1] = cur_imm + float(sum(dimm_dt))
                             d.values[t + 1] = cur_d + float(sum(dd_dt))
+                            if d.values[t+1] < cur_d:
+                                print('Death difference', gv, ev, wv, hv, vv, t, d.values[t + 1], cur_d,
+                                      float(sum(dd_dt)))
                             cases.values[t + 1] = cur_cases + float(sum(dcases_dt))
                             seroprevalence.values[t + 1] = cur_seroprevalence + float(sum(dseroprevalence_dt))
                             total_pob.values[t+1] = su.values[t + 1] + e.values[t + 1] + p.values[t + 1] + \
                                                     sy.values[t + 1] + c.values[t + 1] + h.values[t + 1] + \
                                                     i.values[t + 1] + r_s.values[t + 1] + a.values[t + 1] + \
-                                                    r.values[t + 1] + inm.values[t + 1] + d.values[t + 1]
+                                                    r.values[t + 1] + imm.values[t + 1] + d.values[t + 1]
                             new_home.values[t + 1] = define_treatment * p_c[(ev, vv, hv)]
                             new_hosp.values[t + 1] = define_treatment * p_h[(ev, vv, hv)]
                             new_uci.values[t + 1] = define_treatment * p_i[(ev, vv, hv)]

@@ -35,3 +35,7 @@ model_run.run_sensibility_vac_end(c_beta_base=c_beta_base, c_death_base=c_death_
                                   spc=spc)
 model_run.run_sensibility_contact_variation(c_beta_base=c_beta_base, c_death_base=c_death_base,
                                             c_arrival_base=c_arrival_base, spc=spc)
+model_run.run_sensibility_contact_and_immunity_variation(c_beta_base=c_beta_base, c_death_base=c_death_base,
+                                                         c_arrival_base=c_arrival_base, spc=spc)
+model_run.run_sensibility_ifr_and_vac_end_variation(c_beta_base=c_beta_base, c_death_base=c_death_base,
+                                                         c_arrival_base=c_arrival_base, spc=spc)

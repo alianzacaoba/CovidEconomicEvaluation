@@ -290,8 +290,23 @@ class Model(object):
         age_groups = self.age_groups
         work_groups = self.work_groups
         health_groups = self.health_groups
-        vaccination_groups = ['V0', 'P1', 'P2', 'J', 'S1', 'S2', 'M1', 'M2', 'A1', 'A2', 'R'] \
-            if run_type == 'vaccination' else ['V0']
+        vaccination_groups = ['V0']
+        if run_type == 'vaccination':
+            if 'P' in vaccine_information.keys():
+                vaccination_groups.append('P1')
+                vaccination_groups.append('P2')
+            if 'J' in vaccine_information.keys():
+                vaccination_groups.append('J')
+            if 'S' in vaccine_information.keys():
+                vaccination_groups.append('S1')
+                vaccination_groups.append('S2')
+            if 'M' in vaccine_information.keys():
+                vaccination_groups.append('M1')
+                vaccination_groups.append('M2')
+            if 'A' in vaccine_information.keys():
+                vaccination_groups.append('A1')
+                vaccination_groups.append('A2')
+            vaccination_groups.append('R')
         daly_vector = dict()
         for dv in self.daly_vector:
             if dv == 'Death':
@@ -329,25 +344,29 @@ class Model(object):
                     p_c[(ev, 'R', hv)] = p_c[(ev, 'V0', hv)]
                     p_h[(ev, 'R', hv)] = p_h[(ev, 'V0', hv)]
                     p_i[(ev, 'R', hv)] = p_i[(ev, 'V0', hv)]
-            for vv in ['P2', 'J', 'S2', 'M2', 'A2']:  # Half process
-                for ev in age_groups:
-                    p_s[(vv, ev)] = p_s[('V0', ev)] * (1 - vaccine_information[vv[0]].get('symptomatic_prob_reduction',
-                                                                                          0))
+            for vv in ['P2', 'J', 'S2', 'M2', 'A2']:  # Complete process
+                if vv in vaccination_groups:
+                    for ev in age_groups:
+                        p_s[(vv, ev)] = p_s[('V0', ev)] * (1 - vaccine_information[vv[0]].get('symptomatic_prob_reduction',
+                                                                                              0))
             for vv in ['P1', 'S1', 'M1', 'A1']:  # Half process
-                for ev in age_groups:
-                    p_s[(vv, ev)] = (p_s[('V0', ev)] + p_s[(vv[0] + str(2), ev)]) / 2
+                if vv in vaccination_groups:
+                    for ev in age_groups:
+                        p_s[(vv, ev)] = (p_s[('V0', ev)] + p_s[(vv[0] + str(2), ev)]) / 2
             for ev in age_groups:
                 for hv in health_groups:
                     for vv in ['P2', 'J', 'S2', 'M2', 'A2']:  # Half process
-                        p_i[(ev, vv, hv)] = p_i[(ev, 'V0', hv)] * vaccine_information[vv[0]].get('icu_prob_reduction',
-                                                                                                 1)
-                        p_h[(ev, vv, hv)] = p_h[(ev, 'V0', hv)] * vaccine_information[vv[0]].get('hosp_prob_reduction',
-                                                                                                 1)
-                        p_c[(ev, vv, hv)] = 1 - p_i[(ev, vv, hv)] - p_h[(ev, vv, hv)]
+                        if vv in vaccination_groups:
+                            p_i[(ev, vv, hv)] = p_i[(ev, 'V0', hv)] * vaccine_information[vv[0]].get('icu_prob_reduction',
+                                                                                                     1)
+                            p_h[(ev, vv, hv)] = p_h[(ev, 'V0', hv)] * vaccine_information[vv[0]].get('hosp_prob_reduction',
+                                                                                                     1)
+                            p_c[(ev, vv, hv)] = 1 - p_i[(ev, vv, hv)] - p_h[(ev, vv, hv)]
                     for vv in ['P1', 'S1', 'M1', 'A1']:  # Half process
-                        p_i[(ev, vv, hv)] = (p_i[(ev, 'V0', hv)] + p_i[(ev, vv[0] + str(2), hv)]) / 2
-                        p_h[(ev, vv, hv)] = (p_h[(ev, 'V0', hv)] + p_h[(ev, vv[0] + str(2), hv)]) / 2
-                        p_c[(ev, vv, hv)] = 1 - p_i[(ev, vv, hv)] - p_h[(ev, vv, hv)]
+                        if vv in vaccination_groups:
+                            p_i[(ev, vv, hv)] = (p_i[(ev, 'V0', hv)] + p_i[(ev, vv[0] + str(2), hv)]) / 2
+                            p_h[(ev, vv, hv)] = (p_h[(ev, 'V0', hv)] + p_h[(ev, vv[0] + str(2), hv)]) / 2
+                            p_c[(ev, vv, hv)] = 1 - p_i[(ev, vv, hv)] - p_h[(ev, vv, hv)]
         percentages = dict()
         if vaccine_priority is not None:
             for phase in vaccine_priority:
@@ -435,21 +454,21 @@ class Model(object):
                         p_h_d[(ev, 'R', hv)] = p_h_d[(ev, 'V0', hv)]
                         p_i_d[(ev, 'R', hv)] = p_i_d[(ev, 'V0', hv)]
                         for vv in ['P2', 'J', 'S2', 'M2', 'A2']:  # Half process
-                            p_c_d[(ev, vv, hv)] = p_c_d[(ev, 'V0', hv)] * \
-                                                  vaccine_information[vv[0]].get('home_death_reduction', 1)
-                            p_h_d[(ev, vv, hv)] = p_h_d[(ev, 'V0', hv)] * \
-                                                  vaccine_information[vv[0]].get('hosp_death_reduction', 1)
-                            p_i_d[(ev, vv, hv)] = p_i_d[(ev, 'V0', hv)] * \
-                                                  vaccine_information[vv[0]].get('icu_death_reduction', 1)
+                            if vv in vaccination_groups:
+                                p_c_d[(ev, vv, hv)] = p_c_d[(ev, 'V0', hv)] * \
+                                                      vaccine_information[vv[0]].get('home_death_reduction', 1)
+                                p_h_d[(ev, vv, hv)] = p_h_d[(ev, 'V0', hv)] * \
+                                                      vaccine_information[vv[0]].get('hosp_death_reduction', 1)
+                                p_i_d[(ev, vv, hv)] = p_i_d[(ev, 'V0', hv)] * \
+                                                      vaccine_information[vv[0]].get('icu_death_reduction', 1)
                         for vv in ['P1', 'S1', 'M1', 'A1']:  # Half process
-                            p_c_d[(ev, vv, hv)] = (p_c_d[(ev, 'V0', hv)] + p_c_d[(ev, vv[0] + str(2), hv)]) / 2
-                            p_h_d[(ev, vv, hv)] = (p_h_d[(ev, 'V0', hv)] + p_h_d[(ev, vv[0] + str(2), hv)]) / 2
-                            p_i_d[(ev, vv, hv)] = (p_i_d[(ev, 'V0', hv)] + p_i_d[(ev, vv[0] + str(2), hv)]) / 2
+                            if vv in vaccination_groups:
+                                p_c_d[(ev, vv, hv)] = (p_c_d[(ev, 'V0', hv)] + p_c_d[(ev, vv[0] + str(2), hv)]) / 2
+                                p_h_d[(ev, vv, hv)] = (p_h_d[(ev, 'V0', hv)] + p_h_d[(ev, vv[0] + str(2), hv)]) / 2
+                                p_i_d[(ev, vv, hv)] = (p_i_d[(ev, 'V0', hv)] + p_i_d[(ev, vv[0] + str(2), hv)]) / 2
             params['prob_params']['p_c_d'] = p_c_d
             params['prob_params']['p_h_d'] = p_h_d
             params['prob_params']['p_i_d'] = p_i_d
-            while threading.active_count() >= max_threads:
-                time.sleep(0.00001)
             if run_type == 'calibration':
                 for gv2 in result_queue:
                     if gv2 not in integrated_departments:
@@ -460,6 +479,8 @@ class Model(object):
                         seroprevalence_array[:, gv_region + 6] += result_queue[gv2][:, 3]
                         integrated_departments.append(gv2)
             workers[gv] = DepartmentRun(params=params.copy(), result_queue=result_queue)
+            while threading.active_count() >= max_threads:
+                time.sleep(0.00001)
             workers[gv].start()
         current_threads = threading.active_count()
         while len(result_queue) < len(workers):
@@ -975,7 +996,7 @@ class DepartmentRun(Thread):
                             results_array[:, 0] += np.array(list(population[ev][wv][hv][vv][12].values.values()),
                                                             dtype=float)  # Cases
                             results_array[:, 1] += np.array(list(population[ev][wv][hv][vv][11].values.values()),
-                                                            dtype=float)  # Deaths
+                                                            dtype=float)  # Deathsstar
                             results_array[:, 2] += np.array(list(population[ev][wv][hv][vv][13].values.values()),
                                                             dtype=float)  # Seroprevalence n
                             results_array[:, 3] += np.array(list(population[ev][wv][hv][vv][14].values.values()),

@@ -37,7 +37,13 @@ class MainRun(object):
         self.type_paramsA['daly'] = 'BASE_VALUE'
         self.type_paramsA['cost'] = 'BASE_VALUE'
         self.type_paramsA['vaccine_day'] = 'BASE_VALUE'
-        self.vaccine_information = pd.read_excel(DIR_INPUT + 'vaccine_info.xlsx', index_col=0).to_dict('index')
+        vaccine_information = pd.read_excel(DIR_INPUT + 'vaccine_info.xlsx')
+        self.vaccine_information = dict()
+        for v_scenario in vaccine_information['vaccine_info_scenario'].unique():
+            df = vaccine_information[vaccine_information['vaccine_info_scenario'] == v_scenario].copy()
+            df.drop(columns='vaccine_info_scenario', inplace=True)
+            df.set_index('vaccine', inplace=True)
+            self.vaccine_information[v_scenario] = df.to_dict('index')
 
     def run(self, c_beta_base: tuple, c_death_base: tuple, c_arrival_base: tuple, spc: float):
         """
@@ -53,7 +59,7 @@ class MainRun(object):
                               beta=c_beta_base, death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
                               symptomatic_coefficient=spc, vaccine_priority=None, vaccine_information=None,
                               vaccine_start_days=None, vaccine_end_days=None, sim_length=365 * 3, use_tqdm=True,
-                              t_lost_imm=0, n_parallel=34,
+                              t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
                               exporting_information='All')
         for pvs in self.priority_vaccine_scenarios:
             c_name = 'vac_priority_' + pvs
@@ -61,7 +67,7 @@ class MainRun(object):
             self.model_ex.run(type_params=self.type_paramsA, name=c_name, run_type='vaccination',
                               beta=c_beta_base, death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
                               symptomatic_coefficient=spc, vaccine_priority=self.priority_vaccine_scenarios[pvs],
-                              vaccine_information=self.vaccine_information,
+                              vaccine_information=self.vaccine_information['base'],
                               vaccine_start_days=self.vaccine_start_days,
                               vaccine_end_days=self.vaccine_end_days, sim_length=365 * 3, use_tqdm=True,
                               t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
@@ -84,7 +90,7 @@ class MainRun(object):
                               death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
                               symptomatic_coefficient=spc, vaccine_priority=None, vaccine_information=None,
                               vaccine_start_days=None, vaccine_end_days=None, sim_length=365 * 3, use_tqdm=True,
-                              t_lost_imm=i * 5 / (100 * 365), n_parallel=34,
+                              t_lost_imm=i * 5 / (100 * 365), n_parallel=multiprocessing.cpu_count(),
                               exporting_information=[])
             for pvs in self.priority_vaccine_scenarios:
                 c_name = 'vac_priority_' + pvs + '_' + str(i * 5)
@@ -94,7 +100,7 @@ class MainRun(object):
                                   arrival_coefficient=c_arrival_base,
                                   symptomatic_coefficient=spc,
                                   vaccine_priority=self.priority_vaccine_scenarios[pvs],
-                                  vaccine_information=self.vaccine_information,
+                                  vaccine_information=self.vaccine_information['base'],
                                   vaccine_start_days=self.vaccine_start_days,
                                   vaccine_end_days=self.vaccine_end_days, sim_length=365 * 3, use_tqdm=True,
                                   t_lost_imm=i * 5 / (100 * 365), n_parallel=multiprocessing.cpu_count(),
@@ -120,7 +126,7 @@ class MainRun(object):
                                   death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
                                   symptomatic_coefficient=spc, vaccine_priority=None, vaccine_information=None,
                                   vaccine_start_days=None, vaccine_end_days=None, sim_length=365 * 3, use_tqdm=True,
-                                  t_lost_imm=0, n_parallel=34,
+                                  t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
                                   exporting_information=[])
                 for pvs in self.priority_vaccine_scenarios:
                     c_name = 'sensitivity_' + pv + '_' + val + '_vac_priority_' + pvs
@@ -130,10 +136,10 @@ class MainRun(object):
                                       arrival_coefficient=c_arrival_base,
                                       symptomatic_coefficient=spc,
                                       vaccine_priority=self.priority_vaccine_scenarios[pvs],
-                                      vaccine_information=self.vaccine_information,
+                                      vaccine_information=self.vaccine_information['base'],
                                       vaccine_start_days=self.vaccine_start_days,
                                       vaccine_end_days=self.vaccine_end_days, sim_length=365 * 3, use_tqdm=True,
-                                      t_lost_imm=0, n_parallel=multiprocessing.cpu_count()*3,
+                                      t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
                                       exporting_information=[])
         print('End process')
 
@@ -141,7 +147,8 @@ class MainRun(object):
                          name: str = 'no_vac'):
         self.model_ex.run(type_params=self.type_paramsA, name=name, run_type='no_vaccination', beta=c_beta_base,
                           death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
-                          symptomatic_coefficient=spc, sim_length=500, n_parallel=34, use_tqdm=True)
+                          symptomatic_coefficient=spc, sim_length=500, n_parallel=multiprocessing.cpu_count(),
+                          use_tqdm=True)
         df = pd.read_csv(DIR_OUTPUT + 'result_' + name + '.csv')
         df['Date'] = df['day'].apply(lambda x: datetime.datetime(2020, 2, 21) + datetime.timedelta(days=x))
         df.drop(columns='day', inplace=True)
@@ -196,7 +203,7 @@ class MainRun(object):
                                   beta=c_beta_base, death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
                                   symptomatic_coefficient=spc*cv, vaccine_priority=None, vaccine_information=None,
                                   vaccine_start_days=None, vaccine_end_days=None, sim_length=365 * 3, use_tqdm=True,
-                                  t_lost_imm=0, n_parallel=34,
+                                  t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
                                   exporting_information=[])
             for pvs in self.priority_vaccine_scenarios:
                 c_name = 'vac_priority_' + pvs + '_spc_' + str(cv)
@@ -205,7 +212,7 @@ class MainRun(object):
                                   beta=c_beta_base, death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
                                   symptomatic_coefficient=spc*cv, 
                                   vaccine_priority=self.priority_vaccine_scenarios[pvs], 
-                                  vaccine_information=self.vaccine_information,
+                                  vaccine_information=self.vaccine_information['base'],
                                   vaccine_start_days=self.vaccine_start_days,
                                   vaccine_end_days=self.vaccine_end_days, sim_length=365 * 3, use_tqdm=True,
                                   t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
@@ -220,7 +227,7 @@ class MainRun(object):
                 self.model_ex.run(type_params=self.type_paramsA, name=c_name, run_type='vaccination',
                                   beta=c_beta_base, death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
                                   symptomatic_coefficient=spc, vaccine_priority=self.priority_vaccine_scenarios[pvs],
-                                  vaccine_information=self.vaccine_information,
+                                  vaccine_information=self.vaccine_information['base'],
                                   vaccine_start_days=self.vaccine_start_days,
                                   vaccine_end_days=self.vaccine_end_days, sim_length=365 * 3, use_tqdm=True,
                                   t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
@@ -239,7 +246,7 @@ class MainRun(object):
                               beta=c_beta_base, death_coefficient=death_coef, arrival_coefficient=c_arrival_base,
                               symptomatic_coefficient=spc, vaccine_priority=None, vaccine_information=None,
                               vaccine_start_days=None, vaccine_end_days=None, sim_length=365 * 3, use_tqdm=True,
-                              t_lost_imm=0, n_parallel=34,
+                              t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
                               exporting_information=[])
             for pvs in self.priority_vaccine_scenarios:
                 c_name = 'vac_priority_' + pvs + '_ifr_change_' + str(ifr_change)
@@ -247,7 +254,7 @@ class MainRun(object):
                 self.model_ex.run(type_params=self.type_paramsA, name=c_name, run_type='vaccination',
                                   beta=c_beta_base, death_coefficient=death_coef, arrival_coefficient=c_arrival_base,
                                   symptomatic_coefficient=spc, vaccine_priority=self.priority_vaccine_scenarios[pvs],
-                                  vaccine_information=self.vaccine_information,
+                                  vaccine_information=self.vaccine_information['base'],
                                   vaccine_start_days=self.vaccine_start_days,
                                   vaccine_end_days=self.vaccine_end_days, sim_length=365 * 3, use_tqdm=True,
                                   t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
@@ -264,7 +271,7 @@ class MainRun(object):
                 self.model_ex.run(type_params=self.type_paramsA, name=c_name, run_type='vaccination',
                                   beta=c_beta_base, death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
                                   symptomatic_coefficient=spc, vaccine_priority=self.priority_vaccine_scenarios[pvs],
-                                  vaccine_information=self.vaccine_information,
+                                  vaccine_information=self.vaccine_information['base'],
                                   vaccine_start_days=self.vaccine_start_days,
                                   vaccine_end_days={'BASE_VALUE': dates[vac_end]}, sim_length=365 * 3, use_tqdm=True,
                                   t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
@@ -281,7 +288,7 @@ class MainRun(object):
                               beta=c_beta_base, death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
                               symptomatic_coefficient=spc, vaccine_priority=None, vaccine_information=None,
                               vaccine_start_days=None, vaccine_end_days=None, sim_length=365 * 3, use_tqdm=True,
-                              t_lost_imm=0, n_parallel=34,
+                              t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
                               exporting_information=[], future_variation=deltas[delta])
             for pvs in self.priority_vaccine_scenarios:
                 c_name = 'vac_priority_' + pvs + '_CV_change_' + delta
@@ -289,7 +296,7 @@ class MainRun(object):
                 self.model_ex.run(type_params=self.type_paramsA, name=c_name, run_type='vaccination',
                                   beta=c_beta_base, death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
                                   symptomatic_coefficient=spc, vaccine_priority=self.priority_vaccine_scenarios[pvs],
-                                  vaccine_information=self.vaccine_information,
+                                  vaccine_information=self.vaccine_information['base'],
                                   vaccine_start_days=self.vaccine_start_days,
                                   vaccine_end_days=self.vaccine_end_days, sim_length=365 * 3, use_tqdm=True,
                                   t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
@@ -308,7 +315,7 @@ class MainRun(object):
                                   beta=c_beta_base, death_coefficient=c_death_base, arrival_coefficient=c_arrival_base,
                                   symptomatic_coefficient=spc, vaccine_priority=None, vaccine_information=None,
                                   vaccine_start_days=None, vaccine_end_days=None, sim_length=365 * 3, use_tqdm=True,
-                                  t_lost_imm=immunity_loss[im], n_parallel=34,
+                                  t_lost_imm=immunity_loss[im], n_parallel=multiprocessing.cpu_count(),
                                   exporting_information=[], future_variation=contact_variations[cv])
                 for pvs in self.priority_vaccine_scenarios:
                     c_name = 'vac_priority_' + pvs + '_CV_' + cv + '_immunity_loss_' + im
@@ -317,10 +324,10 @@ class MainRun(object):
                                       beta=c_beta_base, death_coefficient=c_death_base,
                                       arrival_coefficient=c_arrival_base, symptomatic_coefficient=spc,
                                       vaccine_priority=self.priority_vaccine_scenarios[pvs],
-                                      vaccine_information=self.vaccine_information,
+                                      vaccine_information=self.vaccine_information['base'],
                                       vaccine_start_days=self.vaccine_start_days,
                                       vaccine_end_days=self.vaccine_end_days, sim_length=365 * 3, use_tqdm=True,
-                                      t_lost_imm=immunity_loss[im], n_parallel=multiprocessing.cpu_count()*3,
+                                      t_lost_imm=immunity_loss[im], n_parallel=multiprocessing.cpu_count(),
                                       exporting_information=[], future_variation=contact_variations[cv])
         print('End process')
 
@@ -342,9 +349,30 @@ class MainRun(object):
                                       beta=c_beta_base, death_coefficient=death_coef,
                                       arrival_coefficient=c_arrival_base, symptomatic_coefficient=spc,
                                       vaccine_priority=self.priority_vaccine_scenarios[pvs],
-                                      vaccine_information=self.vaccine_information,
+                                      vaccine_information=self.vaccine_information['base'],
                                       vaccine_start_days=self.vaccine_start_days,
                                       vaccine_end_days={'BASE_VALUE': dates[dv]}, sim_length=365 * 3, use_tqdm=True,
-                                      t_lost_imm=0, n_parallel=multiprocessing.cpu_count()*3, exporting_information=[],
+                                      t_lost_imm=0, n_parallel=multiprocessing.cpu_count(), exporting_information=[],
                                       future_variation=None)
+        print('End process')
+
+    def run_sensibility_vaccine_dist(self, c_beta_base: tuple, c_death_base: tuple, c_arrival_base: tuple, spc: float):
+        dates = {'A2022M2': 725, 'A2021M8': 541, 'A2021M9': 572, 'A2021M10': 602, 'A2021M11': 633, 'A2021M12': 663,
+                 'A2022M1': 694, 'A2022M3': 753, 'A2022M4': 784, 'A2022M5': 814, 'A2022M6': 845, 'A2022M7': 875}
+        contact_variations = {'-50': -0.5, 'last_date': None}
+        for v in self.vaccine_information.keys():
+            for vac_end in dates:
+                for cv in contact_variations:
+                    for pvs in self.priority_vaccine_scenarios:
+                        c_name = 'vac_priority_' + pvs + '_vac_dist_' + v + '_vac_end_day_' + vac_end + '_cv_' + cv
+                        print(c_name, datetime.datetime.now())
+                        self.model_ex.run(type_params=self.type_paramsA, name=c_name, run_type='vaccination',
+                                          beta=c_beta_base, death_coefficient=c_death_base,
+                                          arrival_coefficient=c_arrival_base, symptomatic_coefficient=spc,
+                                          vaccine_priority=self.priority_vaccine_scenarios[pvs],
+                                          vaccine_information=self.vaccine_information[v],
+                                          vaccine_start_days=self.vaccine_start_days,
+                                          vaccine_end_days={'BASE_VALUE': dates[vac_end]}, sim_length=365 * 3,
+                                          use_tqdm=True, t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
+                                          exporting_information=[], future_variation=contact_variations[cv])
         print('End process')

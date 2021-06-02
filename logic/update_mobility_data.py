@@ -31,7 +31,7 @@ df = df[df.DATE >= dt.datetime(year=2020, month=2, day=21)]
 df['SIM_DAY'] = (df.DATE - dt.datetime(year=2020, month=2, day=21)).dt.days
 df[['WORK', 'HOME', 'OTHER']] = df[['WORK', 'HOME', 'OTHER']]/100
 df = df[['DATE', 'SIM_DAY', 'REGIONS', 'WORK', 'HOME', 'OTHER']]
-df['SCHOOL'] = df.DATE.apply(lambda x: -1.0 if x >= dt.datetime(year=2020, month=3, day=24) else 0.0)
+df['SCHOOL'] = df['WORK']
 df.fillna(df.mean(), inplace=True)
 print('Values selected', dt.datetime.now())
 df.to_csv(DIR_INPUT + 'contact_matrix_coefficients.csv', index=False)

@@ -160,9 +160,10 @@ class Model(object):
         self.daly_vector = {'Home': {'INF_VALUE': 0.002, 'BASE_VALUE': 0.006, 'MAX_VALUE': 0.012},
                             'Hosp': {'INF_VALUE': 0.032, 'BASE_VALUE': 0.051, 'MAX_VALUE': 0.074},
                             'ICU': {'INF_VALUE': 0.088, 'BASE_VALUE': 0.133, 'MAX_VALUE': 0.190},
+                            'InRecovery': {'INF_VALUE': 0, 'BASE_VALUE': 0, 'MAX_VALUE': 0.012},
                             'Death': {'e0': 72.11, 'e1': 62.11, 'e2': 52.11, 'e3': 42.11, 'e4': 32.11, 'e5': 22.11,
                                       'e6': 12.11, 'e7': 2.11}}
-        self.vaccine_cost = {'INF_VALUE': 1035.892076, 'BASE_VALUE': 9413.864213, 'MAX_VALUE': 32021.81881}
+        self.vaccine_cost = {'INF_VALUE': 37167*0.8, 'BASE_VALUE': 37167, 'MAX_VALUE': 37167*1.2}
         self.contact_matrix = {'HOME': {}, 'WORK': {}, 'SCHOOL': {}, 'OTHER': {}}
         con_matrix_home = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Home', engine="openpyxl")
         con_matrix_other = pd.read_excel(DIR_INPUT + 'contact_matrix.xlsx', sheet_name='Other', engine="openpyxl")
@@ -266,14 +267,16 @@ class Model(object):
         vaccine_start_day = sim_length + 5
         vaccine_end_day = sim_length + 6
         if vaccine_start_days is not None and vaccine_end_days is not None:
-            vaccine_start_day = vaccine_start_days[type_params['vaccine_day']]
-            vaccine_end_day = vaccine_end_days[type_params['vaccine_day']]
+            vaccine_start_day = vaccine_start_days['BASE_VALUE']
+            vaccine_end_day = vaccine_end_days[type_params.get('vaccine_day', 'BASE_VALUE')]
         if vaccine_information is not None:
             for vac in vaccine_information:
                 vaccine_eff = vaccine_information[vac]['effectivity']
                 if vaccine_effectiveness_params is not None:
                     if vaccine_effectiveness_params[0] == 'R':
                         vaccine_eff *= (1-vaccine_effectiveness_params[1])
+                        if vaccine_eff > 1:
+                            vaccine_eff = 1
                     elif vaccine_effectiveness_params[0] == 'V':
                         vaccine_eff = vaccine_effectiveness_params[1]
                 vaccine_information[vac]['dose_effectivity'] = 1 - math.sqrt(
@@ -312,16 +315,16 @@ class Model(object):
             if dv == 'Death':
                 daly_vector[dv] = self.daly_vector[dv]
             else:
-                daly_vector[dv] = self.daly_vector[dv][type_params['daly']]
-        t_e = self.time_params[('t_e', 'ALL')][type_params['t_e']]
-        t_p = self.time_params[('t_p', 'ALL')][type_params['t_p']]
-        t_sy = self.time_params[('t_sy', 'ALL')][type_params['t_sy']]
-        t_a = self.time_params[('t_a', 'ALL')][type_params['t_a']]
-        t_ri = self.time_params[('t_ri', 'ALL')][type_params['t_ri']]
-        initial_sus = self.prob_params[('initial_sus', 'ALL', 'ALL')][type_params['initial_sus']]
+                daly_vector[dv] = self.daly_vector[dv][type_params.get('daly', 'BASE_VALUE')]
+        t_e = self.time_params[('t_e', 'ALL')][type_params.get('t_e', 'BASE_VALUE')]
+        t_p = self.time_params[('t_p', 'ALL')][type_params.get('t_p', 'BASE_VALUE')]
+        t_sy = self.time_params[('t_sy', 'ALL')][type_params.get('t_sy', 'BASE_VALUE')]
+        t_a = self.time_params[('t_a', 'ALL')][type_params.get('t_a', 'BASE_VALUE')]
+        t_ri = self.time_params[('t_ri', 'ALL')][type_params.get('t_ri', 'BASE_VALUE')]
+        initial_sus = self.prob_params[('initial_sus', 'ALL', 'ALL')][type_params.get('initial_sus', 'BASE_VALUE')]
         attention_costs = dict()
         for acv in self.attention_costs:
-            attention_costs[acv] = self.attention_costs[acv][type_params['cost']]
+            attention_costs[acv] = self.attention_costs[acv][type_params.get('attention_cost', 'BASE_VALUE')]
         t_d = dict()
         t_r = dict()
         p_s = dict()
@@ -329,14 +332,15 @@ class Model(object):
         p_h = dict()
         p_i = dict()
         for ev in age_groups:
-            t_d[ev] = self.time_params[('t_d', ev)][type_params['t_d']]
-            t_r[ev] = max(self.time_params[('t_r', ev)][type_params['t_r']] - t_d[ev], 1)
-            p_s[('V0', ev)] = min(self.prob_params[('p_s', ev, 'ALL')][type_params['p_s']] * symptomatic_coefficient,
-                                  1.0)
+            t_d[ev] = self.time_params[('t_d', ev)][type_params.get('t_d', 'BASE_VALUE')]
+            t_r[ev] = max(self.time_params[('t_r', ev)][type_params.get('t_r', 'BASE_VALUE')] - t_d[ev], 1)
+            p_s[('V0', ev)] = min(self.prob_params[('p_s', ev, 'ALL')][type_params.get(('p_s', ev), 'BASE_VALUE')] *
+                                  symptomatic_coefficient, 1.0)
             for hv in health_groups:
-                p_c[(ev, 'V0', hv)] = self.prob_params[('p_c', ev, hv)][type_params['p_c']]
-                p_h[(ev, 'V0', hv)] = self.prob_params[('p_h', ev, hv)][type_params['p_h']]
-                p_i[(ev, 'V0', hv)] = 1 - p_c[(ev, 'V0', hv)] - p_h[(ev, 'V0', hv)]
+                p_i[(ev, 'V0', hv)] = self.prob_params[('p_i', ev, hv)][type_params.get('p_i', 'BASE_VALUE')]
+                p_h[(ev, 'V0', hv)] = self.prob_params[('p_h', ev, hv)][type_params.get('p_h', 'BASE_VALUE')]
+                p_c[(ev, 'V0', hv)] = 1 - p_h[(ev, 'V0', hv)] - p_i[(ev, 'V0', hv)]
+
         if run_type == 'vaccination':
             for ev in age_groups:
                 p_s[('R', ev)] = p_s[('V0', ev)]
@@ -347,20 +351,17 @@ class Model(object):
             for vv in ['P2', 'J', 'S2', 'M2', 'A2']:  # Complete process
                 if vv in vaccination_groups:
                     for ev in age_groups:
-                        p_s[(vv, ev)] = p_s[('V0', ev)] * (1 - vaccine_information[vv[0]].get('symptomatic_prob_reduction',
-                                                                                              0))
+                        p_s[(vv, ev)] = p_s[('V0', ev)] * vaccine_information[vv[0]]['symptomatic_prob_coef']
             for vv in ['P1', 'S1', 'M1', 'A1']:  # Half process
                 if vv in vaccination_groups:
                     for ev in age_groups:
                         p_s[(vv, ev)] = (p_s[('V0', ev)] + p_s[(vv[0] + str(2), ev)]) / 2
             for ev in age_groups:
                 for hv in health_groups:
-                    for vv in ['P2', 'J', 'S2', 'M2', 'A2']:  # Half process
+                    for vv in ['P2', 'J', 'S2', 'M2', 'A2']:  # Complete process
                         if vv in vaccination_groups:
-                            p_i[(ev, vv, hv)] = p_i[(ev, 'V0', hv)] * vaccine_information[vv[0]].get('icu_prob_reduction',
-                                                                                                     1)
-                            p_h[(ev, vv, hv)] = p_h[(ev, 'V0', hv)] * vaccine_information[vv[0]].get('hosp_prob_reduction',
-                                                                                                     1)
+                            p_i[(ev, vv, hv)] = p_i[(ev, 'V0', hv)] * vaccine_information[vv[0]]['icu_prob_coef']
+                            p_h[(ev, vv, hv)] = p_h[(ev, 'V0', hv)] * vaccine_information[vv[0]]['hosp_prob_coef']
                             p_c[(ev, vv, hv)] = 1 - p_i[(ev, vv, hv)] - p_h[(ev, vv, hv)]
                     for vv in ['P1', 'S1', 'M1', 'A1']:  # Half process
                         if vv in vaccination_groups:
@@ -394,7 +395,7 @@ class Model(object):
             # Vaccination run type info
             params['vaccine_information'] = vaccine_information
             params['vaccine_priority'] = vaccine_priority
-            params['vaccine_cost'] = self.vaccine_cost[type_params['cost']]
+            params['vaccine_cost'] = self.vaccine_cost[type_params.get('vaccine_cost', 'BASE_VALUE')]
         params['vaccination_period'] = [vaccine_start_day, vaccine_end_day]
         # All type information
         params['daly_vector'] = daly_vector
@@ -441,13 +442,13 @@ class Model(object):
             for ev in age_groups:
                 for hv in health_groups:
                     p_c_d[(ev, 'V0', hv)] = min(death_coefficient[cur_region] * self.prob_params[('p_c_d', ev, hv)][
-                        type_params['p_c_d']], 1.0)
+                        type_params.get(('p_c_d', hv), 'BASE_VALUE')], 1.0)
                     p_h_d[(ev, 'V0', hv)] = min(death_coefficient[cur_region] * self.prob_params[('p_h_d', ev, hv)][
-                        type_params['p_h_d']], 1.0)
+                        type_params.get(('p_h_d', hv), 'BASE_VALUE')], 1.0)
                     p_i_d[(ev, 'V0', hv)] = min(death_coefficient[cur_region] * self.prob_params[('p_i_d', ev, hv)][
-
-                        type_params['p_i_d']], 1.0)
+                        type_params.get(('p_i_d', hv), 'BASE_VALUE')], 1.0)
             if run_type == 'vaccination':
+                vac_death_coef = 'death_coef_' + type_params.get('vac_death', 'BASE_VALUE')
                 for ev in age_groups:
                     for hv in health_groups:
                         p_c_d[(ev, 'R', hv)] = p_c_d[(ev, 'V0', hv)]
@@ -455,12 +456,9 @@ class Model(object):
                         p_i_d[(ev, 'R', hv)] = p_i_d[(ev, 'V0', hv)]
                         for vv in ['P2', 'J', 'S2', 'M2', 'A2']:  # Half process
                             if vv in vaccination_groups:
-                                p_c_d[(ev, vv, hv)] = p_c_d[(ev, 'V0', hv)] * \
-                                                      vaccine_information[vv[0]].get('home_death_reduction', 1)
-                                p_h_d[(ev, vv, hv)] = p_h_d[(ev, 'V0', hv)] * \
-                                                      vaccine_information[vv[0]].get('hosp_death_reduction', 1)
-                                p_i_d[(ev, vv, hv)] = p_i_d[(ev, 'V0', hv)] * \
-                                                      vaccine_information[vv[0]].get('icu_death_reduction', 1)
+                                p_c_d[(ev, vv, hv)] = p_c_d[(ev, 'V0', hv)] * vaccine_information[vv[0]][vac_death_coef]
+                                p_h_d[(ev, vv, hv)] = p_h_d[(ev, 'V0', hv)] * vaccine_information[vv[0]][vac_death_coef]
+                                p_i_d[(ev, vv, hv)] = p_i_d[(ev, 'V0', hv)] * vaccine_information[vv[0]][vac_death_coef]
                         for vv in ['P1', 'S1', 'M1', 'A1']:  # Half process
                             if vv in vaccination_groups:
                                 p_c_d[(ev, vv, hv)] = (p_c_d[(ev, 'V0', hv)] + p_c_d[(ev, vv[0] + str(2), hv)]) / 2
@@ -523,8 +521,8 @@ class Model(object):
                                                                    datetime.timedelta(days=x))
             print('Begin CSV exportation', datetime.datetime.now())
             pop_pandas = pop_pandas.round(decimals=2)
-            pop_pandas.to_csv(DIR_OUTPUT + 'result_' + name + '.csv', index=False)
-            print('CSV ', DIR_OUTPUT + 'result_' + name + '.csv', 'exported', datetime.datetime.now())
+            pop_pandas.to_csv(DIR_OUTPUT + name + '.csv', index=False)
+            print('CSV ', DIR_OUTPUT + name + '.csv', 'exported', datetime.datetime.now())
             return pop_pandas
 
 
@@ -862,19 +860,21 @@ class DepartmentRun(Thread):
                             new_hosp.values[t + 1] = define_treatment * p_h[(ev, vv, hv)]
                             new_uci.values[t + 1] = define_treatment * p_i[(ev, vv, hv)]
                             vac_cost.values[t + 1] = 0
-                            home_cost.values[t + 1] = new_home.values[t + 1] * attention_costs[(ev, hv, 'C')]
-                            hosp_cost.values[t + 1] = new_hosp.values[t + 1] * attention_costs[(ev, hv, 'H')]
-                            uci_cost.values[t + 1] = new_uci.values[t + 1] * attention_costs[(ev, hv, 'I')]
-                            home_daly.values[t + 1] = c.values[t + 1] * daly_vector['Home'] / 365 +\
-                                                      home_death_threshold*(1 - p_c_d[(ev, vv, hv)]) * \
-                                                      daly_vector['Home']*t_r[ev]/365
-                            hosp_daly.values[t + 1] = h.values[t + 1] * daly_vector['Hosp'] / 365 + \
-                                                      hosp_death_threshold * (1 - p_h_d[(ev, vv, hv)]) * \
-                                                      daly_vector['Hosp'] * t_r[ev] / 365
-                            uci_daly.values[t + 1] = i.values[t + 1] * daly_vector['ICU'] / 365 + \
-                                                     icu_death_threshold * (1 - p_i_d[(ev, vv, hv)]) * \
-                                                      daly_vector['ICU'] * t_r[ev] / 365
-                            death_daly.values[t+1] = float(sum(dd_dt)) * daly_vector['Death'][ev]
+                            if t >=419:
+                                home_cost.values[t + 1] = new_home.values[t + 1] * attention_costs[(ev, hv, 'C')]
+                                hosp_cost.values[t + 1] = new_hosp.values[t + 1] * attention_costs[(ev, hv, 'H')]
+                                uci_cost.values[t + 1] = new_uci.values[t + 1] * attention_costs[(ev, hv, 'I')]
+                                home_daly.values[t + 1] = c.values[t + 1] * daly_vector['Home'] / 365 +\
+                                                          home_death_threshold*(1 - p_c_d[(ev, vv, hv)]) * \
+                                                          daly_vector['Home']*t_r[ev]/365 + \
+                                                          r_s.values[t + 1] * daly_vector['InRecovery']/365
+                                hosp_daly.values[t + 1] = h.values[t + 1] * daly_vector['Hosp'] / 365 + \
+                                                          hosp_death_threshold * (1 - p_h_d[(ev, vv, hv)]) * \
+                                                          daly_vector['Hosp'] * t_r[ev] / 365
+                                uci_daly.values[t + 1] = i.values[t + 1] * daly_vector['ICU'] / 365 + \
+                                                         icu_death_threshold * (1 - p_i_d[(ev, vv, hv)]) * \
+                                                          daly_vector['ICU'] * t_r[ev] / 365
+                                death_daly.values[t+1] = float(sum(dd_dt)) * daly_vector['Death'][ev]
 
             # Vaccination dynamics
             if vaccine_start_day <= t <= vaccine_end_day:
@@ -883,11 +883,12 @@ class DepartmentRun(Thread):
                                                                  vaccine_priority=vaccine_priority,
                                                                  vaccine_capacity=vaccine_capacity,
                                                                  candidates_indexes=candidates_indexes)
-                for ev in age_groups:
-                    for wv in work_groups:
-                        for hv in health_groups:
-                            for i_vv in vaccination_candidates:
-                                for o_vv in vaccination_calendar[t].keys():
+                for o_vv in vaccination_calendar[t].keys():
+                    cur_vaccine_cost = vaccine_cost if o_vv == 'J' else vaccine_cost / 2
+                    for ev in age_groups:
+                        for wv in work_groups:
+                            for hv in health_groups:
+                                for i_vv in vaccination_candidates:
                                     # Susceptible:
                                     assigned_s = assignation.get((ev, wv, hv, i_vv, 0, o_vv), 0)
                                     assigned_e = assignation.get((ev, wv, hv, i_vv, 1, o_vv), 0)
@@ -913,7 +914,7 @@ class DepartmentRun(Thread):
                                         population[ev][wv][hv][o_vv][2].values[t + 1] += sum(d_o_p)
                                         population[ev][wv][hv][o_vv][8].values[t + 1] += sum(d_o_a)
                                         population[ev][wv][hv][o_vv][10].values[t + 1] += sum(d_o_im)
-                                        population[ev][wv][hv][o_vv][18].values[t + 1] = vaccine_cost * \
+                                        population[ev][wv][hv][o_vv][18].values[t + 1] = cur_vaccine_cost * \
                                                                                              (assigned_s +
                                                                                               assigned_e +
                                                                                               assigned_a +

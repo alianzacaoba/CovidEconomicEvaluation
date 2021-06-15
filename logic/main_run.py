@@ -141,7 +141,7 @@ class MainRun(object):
                               vaccine_start_days=self.vaccine_start_days, vaccine_end_days=self.vaccine_end_days,
                               sim_length=365 * 3, use_tqdm=True, t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
                               exporting_information=[])
-        for pv in ['t_e', 't_p', 't_ri', 't_d', 't_r']:  # self.type_paramsA:
+        for pv in self.type_paramsA:
             type_params_b = self.type_paramsA.copy()
             for val in ['INF_VALUE', 'MAX_VALUE']:
                 type_params_b[pv] = val
@@ -177,7 +177,7 @@ class MainRun(object):
                                       vaccine_end_days=self.vaccine_end_days, sim_length=365 * 3, use_tqdm=True,
                                       t_lost_imm=0, n_parallel=multiprocessing.cpu_count(),
                                       exporting_information=[])
-        '''ifr_changes = {'INF_VALUE': 0.8, 'SUP_VALUE': 1.2}
+        ifr_changes = {'INF_VALUE': 0.8, 'SUP_VALUE': 1.2}
         for ifr_change in ifr_changes:
             death_coef = []
             for dc in c_death_base:
@@ -236,7 +236,7 @@ class MainRun(object):
                                   vaccine_start_days=self.vaccine_start_days, vaccine_end_days=self.vaccine_end_days,
                                   sim_length=365 * 3, use_tqdm=True, t_lost_imm=0,
                                   n_parallel=multiprocessing.cpu_count(), exporting_information=[],
-                                  vaccine_effectiveness_params=vac_effs[vac_eff_params])'''
+                                  vaccine_effectiveness_params=vac_effs[vac_eff_params])
         print('End process')
 
     def run_quality_test(self, c_beta_base: tuple, c_death_base: tuple, c_arrival_base: tuple, spc: float,
@@ -344,7 +344,7 @@ class MainRun(object):
             for dc in c_death_base:
                 death_coef.append(dc*ifr_change)
             death_coef = tuple(death_coef)
-            c_name = 'result_no_vac_spc_' + '_ifr_change_' + str(ifr_change)
+            c_name = 'result_no_vac_' + '_ifr_change_' + str(ifr_change)
             print(c_name, datetime.datetime.now())
             self.model_ex.run(type_params=self.type_paramsA, name=os.path.join('IFR_Change', c_name),
                               run_type='no_vaccination', beta=c_beta_base, death_coefficient=death_coef,

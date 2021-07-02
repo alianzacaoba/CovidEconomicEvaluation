@@ -997,7 +997,7 @@ class DepartmentRun(Thread):
                             results_array[:, 0] += np.array(list(population[ev][wv][hv][vv][12].values.values()),
                                                             dtype=float)  # Cases
                             results_array[:, 1] += np.array(list(population[ev][wv][hv][vv][11].values.values()),
-                                                            dtype=float)  # Deathsstar
+                                                            dtype=float)  # Deaths
                             results_array[:, 2] += np.array(list(population[ev][wv][hv][vv][13].values.values()),
                                                             dtype=float)  # Seroprevalence n
                             results_array[:, 3] += np.array(list(population[ev][wv][hv][vv][14].values.values()),
